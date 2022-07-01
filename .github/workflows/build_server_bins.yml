@@ -3,11 +3,14 @@
 on:
   release:
     types: [created]
+    
+defaults:
+  run:
+    working-directory: Server
+
 
 jobs:
   release:
-    env:
-      working-directory: ./server
     name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
