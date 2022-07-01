@@ -4,7 +4,7 @@
 	"author": "olof blomqvist <olof@twnet.se>",
 	"license": "MIT",
 	"version": "0.0.1",
-	"publisher": "olof blomqvist",
+	"publisher": "OlofBlomqvist",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/olofblomqvist/marlowe_vscode_lspc"

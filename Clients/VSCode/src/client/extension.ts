@@ -17,11 +17,11 @@ export function activate(context: ExtensionContext) {
   let bin_path;
   let platform = os.platform();
   if(platform === "win32") {
-    bin_path = context.extensionPath + "/bin/marlowe_lsp.exe"
+    bin_path = context.extensionPath + "/bin/marlowe_lsp_win_x86_64_.exe"
   } else if (platform === "darwin") {
-    throw "temporary throw for darwin"
+    bin_path = context.extensionPath + "/bin/marlowe_lsp_x86_64-apple-darwin"
   } else if (platform === "linux") {
-    throw "temporary throw for linux"
+    bin_path = context.extensionPath + "/bin/marlowe_lsp_test4_x86_64-unknown-linux-musl"
   } else {
     throw "unsupported platform: " + platform
   }
