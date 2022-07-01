@@ -1,0 +1,55 @@
+{
+	"name": "marlowelsp",
+	"description": "Marlowe LSP Client",
+	"author": "olof blomqvist <olof@twnet.se>",
+	"license": "MIT",
+	"version": "0.0.1",
+	"publisher": "olof blomqvist",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/olofblomqvist/marlowe_vscode_lspc"
+	},
+	"engines": {
+		"vscode": "^1.63.0"
+	},
+	"main": "./build/client/extension",
+	"activationEvents": [
+		"onLanguage:Marlowe"
+	],
+	"contributes": {
+		"languages": [{
+			"extensions": [
+				".marlowe"
+			],
+			"id": "Marlowe"
+		}],
+		"configuration": {
+			"type": "object",
+			"title": "Test",
+			"properties": {
+				"MarloweLSP.IgnoreMe": {
+					"scope": "resource",
+					"type": "number",
+					"default": 100,
+					"description": "This does nothing"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -b",
+		"watch": "tsc -b -w",
+		"lint": "eslint ./src --ext .ts,.tsx",
+		"postinstall": "cd ./src/client"
+	},
+	"dependencies": {
+		"nodejs-fetch": "^1.0.0",
+		"vscode-languageclient": "^7.0.0"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.63.0",
+		"@vscode/test-electron": "^2.1.2",
+		"typescript": "^4.7.4"
+	}
+}

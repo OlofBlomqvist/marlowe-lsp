@@ -1,0 +1,22 @@
+[package]
+name = "marlowe_lsp"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+
+codespan = "*"
+codespan-reporting = "*"
+serde = "*"
+serde_json = "*"
+tokio-util = { version = "0.7",  features = ["codec"] }
+tokio = { version = "1.17", features = ["full"]}
+lsp-types = "0.93.0" 
+pest = "*"
+pest_derive = "*"
+schemars = "*"
+marlowe_lang = "0.1.0"
+async-std = "1.10.0"
+futures = "0.3.21"
+tower-lsp = "0.17"

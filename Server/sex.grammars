@@ -1,0 +1,24 @@
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+// Idents must start with a-Z
+ident  = @{ ASCII_ALPHA{1} ~ (ASCII_ALPHA|ASCII_DIGIT|"_")+ }
+
+number = @{ ASCII_DIGIT+ }
+
+string = { "\"" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-")* ~ "\""  }
+
+comment = @{ "//" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-")* ~ NEWLINE}
+
+expression = { 
+  comment
+   | ident ~ (expression|number|string|arr)*
+   | "(" ~ ident ~ (expression|number|string|arr)* ~ ")"
+}
+
+singleItemArray = _{ "[" ~ (arr|number|string|expression)* ~ "]" }
+multiItemArray = _{ "[" ~ ((arr|number|string|expression)~",")* ~ (arr|number|string|expression) ~"]" }
+arr = {
+  singleItemArray | multiItemArray 
+}
+
+expressions = { SOI ~ (comment|expression)+ ~ EOI }
