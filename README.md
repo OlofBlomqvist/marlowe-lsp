@@ -4,7 +4,7 @@ An experimental LSP for Cardano Marlowe using [marlowe_rust](https://github.com/
 
 ### Requirements for building
 
-* Cargo/Rust toolchain
+* Cargo/Rust nightly toolchain
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
