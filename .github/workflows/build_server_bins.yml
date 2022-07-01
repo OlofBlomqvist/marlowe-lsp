@@ -1,4 +1,4 @@
-# .github/workflows/release.yml
+# Build Server Bins
 
 on:
   release:
@@ -6,6 +6,8 @@ on:
 
 jobs:
   release:
+    env:
+      working-directory: ./server
     name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
