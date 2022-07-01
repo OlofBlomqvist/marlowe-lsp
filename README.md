@@ -1,6 +1,6 @@
 ## MarloweLSP
 
-An experimental LSP for Cardano Marlowe smart contracts.
+An experimental LSP for Cardano Marlowe using [marlowe_rust](https://github.com/OlofBlomqvist/marlowe_rust).
 
 ### Requirements for building
 
