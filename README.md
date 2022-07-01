@@ -17,7 +17,7 @@ If using PowerShell, you can run the build.ps1 script,
 otherwise use "cargo build" in the server directory,
 and "vsce package" in the client directory.
 
-Don't forget to copy your binary to the ./client/server before generating the client package.
+Don't forget to copy your binary to the ./client/bin directory before generating the client package.
 
 
 
