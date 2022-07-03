@@ -17,11 +17,11 @@ export function activate(context: ExtensionContext) {
   let bin_path;
   let platform = os.platform();
   if(platform === "win32") {
-    bin_path = context.extensionPath + "/bin/marlowe_lsp_win_x86_64_.exe"
+    bin_path = context.extensionPath + "/bin/marlowe_lsp_x86_64-windows.exe"
   } else if (platform === "darwin") {
-    bin_path = context.extensionPath + "/bin/marlowe_lsp_x86_64-apple-darwin"
+    bin_path = context.extensionPath + "/bin/marlowe_lsp_x86_64-apple-darwin.bin"
   } else if (platform === "linux") {
-    bin_path = context.extensionPath + "/bin/marlowe_lsp_test4_x86_64-unknown-linux-musl"
+    bin_path = context.extensionPath + "/bin/marlowe_lsp_x86_64-unknown-linux-musl.bin"
   } else {
     throw "unsupported platform: " + platform
   }
