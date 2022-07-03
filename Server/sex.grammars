@@ -5,7 +5,7 @@ ident  = @{ ASCII_ALPHA{1} ~ (ASCII_ALPHA|ASCII_DIGIT|"_")+ }
 
 number = @{ ASCII_DIGIT+ }
 
-string = { "\"" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-")* ~ "\""  }
+string = @{ "\"" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-")* ~ "\""  }
 
 comment = @{ "//" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-")* ~ NEWLINE}
 

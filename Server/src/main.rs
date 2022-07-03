@@ -66,12 +66,10 @@ impl LanguageServer for MyLSPServer {
                                  },
                                 legend: SemanticTokensLegend { 
                                     token_types: vec![
-                                        //SemanticTokenType::ENUM,
-                                        //SemanticTokenType::CLASS,
                                         SemanticTokenType::VARIABLE,
-                                        //SemanticTokenType::COMMENT,
                                         SemanticTokenType::STRING,
-                                        SemanticTokenType::NUMBER                                       
+                                        SemanticTokenType::NUMBER ,
+                                        SemanticTokenType::STRUCT
                                     ], 
                                     token_modifiers: vec![
                                         SemanticTokenModifier::STATIC
@@ -99,7 +97,39 @@ impl LanguageServer for MyLSPServer {
             Some(token_list) => {
                 let closest = marlowe_lang::parsing::Rule::get_token_info_at_position(
                     token_list.to_vec(),
-                    params.text_document_position_params.position
+                    params.text_document_position_params.position,
+                    |r| match r {
+                        marlowe_lang::parsing::Rule::Notify |
+                        marlowe_lang::parsing::Rule::Choice |
+                        marlowe_lang::parsing::Rule::Deposit => String::from("Contracts in Marlowe run on a blockchain, but need to interact with the off-chain world. The parties to the contract, whom we also call the participants, can engage in various actions: they can be asked to deposit money, or to make a choice between various alternatives. A notification of an external value (also called an oracle value), such as the current price of a particular commodity, is the other possible form of input."),
+                        marlowe_lang::parsing::Rule::Case => String::from("A When contract contains a collection of cases. Each case has the form Case action next where action is an Action and next a continuation (another contract). When a particular action happens, the state is updated accordingly and the contract will continue as the corresponding continuation next."),
+                        marlowe_lang::parsing::Rule::Bound => String::from("A choice is made for a particular id with a list of bounds on the values that are acceptable. For example, [Bound 0 0, Bound 3 5] offers the choice of one of 0, 3, 4 and 5."),
+                        marlowe_lang::parsing::Rule::Party |
+                        marlowe_lang::parsing::Rule::PK |
+                        marlowe_lang::parsing::Rule::Role => String::from("A Party is represented as either a public key hash or a role name. In order to progress a Marlowe contract, a party must provide an evidence. For PK party that would be a valid signature of a transaction signed by a private key of a public key that hashes to party’s PubKeyHash, similarly to Bitcoin’s Pay to Public Key Hash mechanism. For a Role party the evidence is spending a role token within the same transaction, usually to the same owner.\n
+                        So, Role parties will look like (Role \"alice\"), (Role \"bob\") and so on."),
+                        marlowe_lang::parsing::Rule::ChoiceId => String::from("Choices – of integers – are identified by ChoiceId which combines a name for the choice with the Party who had made the choice"),
+                        marlowe_lang::parsing::Rule::TimeIntervalStart |
+                        marlowe_lang::parsing::Rule::ConstantParam |
+                        marlowe_lang::parsing::Rule::Constant |
+                        marlowe_lang::parsing::Rule::MulValue |
+                        marlowe_lang::parsing::Rule::DivValue |
+                        marlowe_lang::parsing::Rule::SubValue |
+                        marlowe_lang::parsing::Rule::TimeIntervalEnd => String::from("A Value encompasses Ada, fungible tokens (think currencies), non-fungible tokens (a custom token that is not interchangeable with other tokens), and more exotic mixed cases."),
+                        marlowe_lang::parsing::Rule::TimeInterval |
+                        marlowe_lang::parsing::Rule::TimeParam |
+                        marlowe_lang::parsing::Rule::TimeConstant => String::from("Timeout is the slot number after which the When will no longer accept any new events: Case branches will become unusable, and the contract will continue as specified by the timeout continuation.
+                        Timeouts accept templates, this means that instead of writing a specific slot number it is possible to fill Timeouts by using a template parameter that can be filled just before deploying or simulating the contract, for example: TimeParam \"maturityDate\""),
+                        marlowe_lang::parsing::Rule::Close |
+                        marlowe_lang::parsing::Rule::Pay |
+                        marlowe_lang::parsing::Rule::Let |
+                        marlowe_lang::parsing::Rule::If |
+                        marlowe_lang::parsing::Rule::Assert |
+                        marlowe_lang::parsing::Rule::When => String::from("Marlowe has six ways of building contracts. Five of these – Pay, Let, If, When and Assert – build a complex contract from simpler contracts, and the sixth, Close, is a simple contract. At each step of execution, as well as returning a new state and continuation contract, it is possible that effects – payments – and warnings can be generated too."),
+                        marlowe_lang::parsing::Rule::Token => 
+                            String::from("A Marlowe Account holds amounts of multiple currencies and/or fungible and non-fungible tokens. A concrete amount is indexed by a Token, which is a pair of CurrencySymbol and TokenName."),
+                        _ => format!("{r:?}")
+                    }
                 );
                 match closest {
                     Some(v) => {
@@ -137,6 +167,7 @@ impl LanguageServer for MyLSPServer {
     ) -> Result<Option<SemanticTokensResult>> {
         
         let state = self.state.lock().unwrap();
+
         match state.sexpression_asts.get(&params.text_document.uri) {
             Some(token_list) => {
                 Ok(Some(SemanticTokensResult::Tokens(SemanticTokens{
@@ -300,21 +331,45 @@ fn update_document(
     id
 }
 
-fn update_asts(source:String,state:&mut State,url:Url)  {
 
-    let marlowe_tokens = marlowe_lang::parsing::Rule::lsp_parse(
-        &source, |_r|{0} // we don't use these for syntax highlights so doesnt matter
-    );
-
-    let sex_tokens = sex::Rule::lsp_parse(
-        &source,  |r|{match r {
+// uses marlowe token rule in combination with s expression to create final verdict 
+// on which semantictoken type to use for a specific range
+fn get_token_id(mar_vec:Vec<(Range, marlowe_lang::parsing::Rule, SemanticToken)>) -> impl Fn(sex::Rule,Range) -> u32 {
+    move |rule:sex::Rule,range:Range| {
+        let marlowe_match = 
+            mar_vec.iter().find(|x|x.0==range);
+        let default_func = |rule| match rule {
             sex::Rule::string => 1,
             sex::Rule::number => 2,
             sex::Rule::ident => 0,
             _ => 99
-        }}
-    );
+        };
+        if let Some(x) = marlowe_match {
+            match x.1 {
+                marlowe_lang::parsing::Rule::Case => 3,
+                _ => default_func(rule)
+            }
+        } else { default_func(rule) }
+    }
+}
+
+fn update_asts(source:String,state:&mut State,url:Url)  {
     
+    let marlowe_tokens = marlowe_lang::parsing::Rule::lsp_parse(
+        &source, |_rule,_range|{0} // we don't use output from this fn atm
+    );
+
+    let mar_vec = 
+        match &marlowe_tokens {
+            Ok(x) => x.to_vec(),
+            Err(_) => vec![],
+        };
+
+    let sex_tokens = 
+        sex::Rule::lsp_parse(
+            &source,  get_token_id(mar_vec)
+        );
+
     match marlowe_tokens {
         Ok(tokens) => {
             //println!("Marlowe parser succeeded");
@@ -423,9 +478,9 @@ pub mod sex {
 // We do multiple passes (sexpress+marlowe) for parsing because it was easier to do
 // than switch from pest.rs which does not support token streaming..
 trait LSParse<T> {
-    fn lsp_parse(sample:&str,f: fn(T) -> u32) -> std::result::Result<Vec<(Range,T,lsp_types::SemanticToken)>,(String,lsp_types::Range)>;
+    fn lsp_parse(sample:&str,f: impl Fn(T,Range) -> u32) -> std::result::Result<Vec<(Range,T,lsp_types::SemanticToken)>,(String,lsp_types::Range)>;
     fn get_token_at_position(tokens:Vec<(Range,T,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<(Range,T,SemanticToken)>;
-    fn get_token_info_at_position(p:Vec<(Range,T,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<String>;
+    fn get_token_info_at_position(p:Vec<(Range,T,lsp_types::SemanticToken)>,position:lsp_types::Position, f:fn(T)->String) -> Option<String>;
 }
 
 use pest::Parser;
@@ -436,7 +491,7 @@ macro_rules! Impl_LSPARSE_For {
     ($rule_type:ty,$parser_type:ty,$top_type:expr) => {
         impl LSParse<$rule_type> for $rule_type {
             
-            fn lsp_parse(sample:&str,f: fn($rule_type) -> u32) -> std::result::Result<Vec<(Range,$rule_type,lsp_types::SemanticToken)>,(String,lsp_types::Range)> {
+            fn lsp_parse(sample:&str,f: impl Fn($rule_type,Range) -> u32) -> std::result::Result<Vec<(Range,$rule_type,lsp_types::SemanticToken)>,(String,lsp_types::Range)> {
                 
                 match <$parser_type>::parse(
                     $top_type,
@@ -479,7 +534,7 @@ macro_rules! Impl_LSPARSE_For {
                                         delta_line: (this_line_start - last_line_start) as u32,
                                         delta_start: corrected_start ,
                                         length: calculated_length as u32,
-                                        token_type: f(x.as_rule()), 
+                                        token_type: f(x.as_rule(),range), 
                                         token_modifiers_bitset: 0 
                                     };
             
@@ -564,9 +619,9 @@ macro_rules! Impl_LSPARSE_For {
                 }
             }
             
-            fn get_token_info_at_position(p:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<String> {
+            fn get_token_info_at_position(p:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position, f:fn($rule_type)->String) -> Option<String> {
                 match Self::get_token_at_position(p,position) {
-                        Some(ooh) => Some(format!("{:?}",ooh.1)),
+                        Some(ooh) => Some(f(ooh.1)),
                         None => None
                 }    
             }
@@ -574,6 +629,8 @@ macro_rules! Impl_LSPARSE_For {
         }
     }
 }
+
+
 
 Impl_LSPARSE_For!(
     sex::Rule,
@@ -594,13 +651,6 @@ use tokio::io::{stdin, stdout};
 #[tokio::main]
 //#[wasm_bindgen]
 pub async fn main() {
-
-    // ===== todo - fix this sillyness ========================
-    // let args: Vec<String> = std::env::args().collect();
-    // let mut p = "8080";
-    // let x = args.last().unwrap();
-    // if x.starts_with("8") { p = x; }
-    // ========================================================
 
     let (service, socket) = 
         LspService::build(|xx| {
@@ -628,7 +678,7 @@ pub async fn main() {
     server.serve(service).await;
     // loop {
         
-    //     let listener = TcpListener::bind(format!("127.0.0.1:{p}")).await.unwrap();
+    //     let listener = TcpListener::bind(format!("127.0.0.1:8080")).await.unwrap();
     //     println!("Starting lsp service listener ... {:?}",listener);
     //     let (stream, _) = listener.accept().await.unwrap();
     //     let (read, write) = tokio::io::split(stream);

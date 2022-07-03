@@ -660,9 +660,9 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "marlowe_lang"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2a3a2e303eeb896638bddd548e5f919ee5de7b6c5c70c6ae2f07d36b30aae04"
+checksum = "5ce39d99bb7cbb0b64a40150e2794782f5d2c3386a1ae19d8eee47f53de49ee1"
 dependencies = [
  "clap",
  "decurse",
