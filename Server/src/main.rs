@@ -3,7 +3,7 @@
 mod codespan_lsp_local;
 use codespan::FileId;
 use codespan_lsp_local::{range_to_byte_span};
-
+use regex::{Regex};
 use std::{collections::HashMap, sync::Mutex};
 use serde_json::Value;
 use tower_lsp::{ jsonrpc::{Result}, Client, LanguageServer, LspService, Server };
@@ -18,8 +18,8 @@ struct MyLSPServer {
 #[derive(Debug)]
 struct State {
     sources: HashMap<Url, FileId>,
-    sexpression_asts: HashMap<Url, Vec<(Range,sex::Rule,SemanticToken)>>,
-    marlowe_asts: HashMap<Url, Vec<(Range,marlowe_lang::parsing::Rule,SemanticToken)>>,
+    sexpression_asts: HashMap<Url, (Vec<(Range,sex::Rule,SemanticToken)>,ContractValidationResult)>,
+    marlowe_asts:     HashMap<Url, (Vec<(Range,marlowe_lang::parsing::Rule,SemanticToken)>,ContractValidationResult)>,
     files: codespan::Files<String>,
     marlowe_parser_error: Option<(String,Range)>,
     sexpression_parser_error: Option<(String,Range)>
@@ -37,7 +37,7 @@ impl LanguageServer for MyLSPServer {
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string()]),
+                    trigger_characters: Some(vec![String::from("\"")]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                     ..Default::default()
@@ -96,7 +96,7 @@ impl LanguageServer for MyLSPServer {
         match state.marlowe_asts.get(&params.text_document_position_params.text_document.uri) {
             Some(token_list) => {
                 let closest = marlowe_lang::parsing::Rule::get_token_info_at_position(
-                    token_list.to_vec(),
+                    token_list.0.to_vec(),
                     params.text_document_position_params.position,
                     |r| match r {
                         marlowe_lang::parsing::Rule::Notify |
@@ -106,8 +106,7 @@ impl LanguageServer for MyLSPServer {
                         marlowe_lang::parsing::Rule::Bound => String::from("A choice is made for a particular id with a list of bounds on the values that are acceptable. For example, [Bound 0 0, Bound 3 5] offers the choice of one of 0, 3, 4 and 5."),
                         marlowe_lang::parsing::Rule::Party |
                         marlowe_lang::parsing::Rule::PK |
-                        marlowe_lang::parsing::Rule::Role => String::from("A Party is represented as either a public key hash or a role name. In order to progress a Marlowe contract, a party must provide an evidence. For PK party that would be a valid signature of a transaction signed by a private key of a public key that hashes to party’s PubKeyHash, similarly to Bitcoin’s Pay to Public Key Hash mechanism. For a Role party the evidence is spending a role token within the same transaction, usually to the same owner.\n
-                        So, Role parties will look like (Role \"alice\"), (Role \"bob\") and so on."),
+                        marlowe_lang::parsing::Rule::Role => String::from("A Party is represented as either a public key hash or a role name. In order to progress a Marlowe contract, a party must provide an evidence. For PK party that would be a valid signature of a transaction signed by a private key of a public key that hashes to party’s PubKeyHash, similarly to Bitcoin’s Pay to Public Key Hash mechanism. For a Role party the evidence is spending a role token within the same transaction, usually to the same owner. So, Role parties will look like (Role \"alice\"), (Role \"bob\") and so on."),
                         marlowe_lang::parsing::Rule::ChoiceId => String::from("Choices – of integers – are identified by ChoiceId which combines a name for the choice with the Party who had made the choice"),
                         marlowe_lang::parsing::Rule::TimeIntervalStart |
                         marlowe_lang::parsing::Rule::ConstantParam |
@@ -118,8 +117,7 @@ impl LanguageServer for MyLSPServer {
                         marlowe_lang::parsing::Rule::TimeIntervalEnd => String::from("A Value encompasses Ada, fungible tokens (think currencies), non-fungible tokens (a custom token that is not interchangeable with other tokens), and more exotic mixed cases."),
                         marlowe_lang::parsing::Rule::TimeInterval |
                         marlowe_lang::parsing::Rule::TimeParam |
-                        marlowe_lang::parsing::Rule::TimeConstant => String::from("Timeout is the slot number after which the When will no longer accept any new events: Case branches will become unusable, and the contract will continue as specified by the timeout continuation.
-                        Timeouts accept templates, this means that instead of writing a specific slot number it is possible to fill Timeouts by using a template parameter that can be filled just before deploying or simulating the contract, for example: TimeParam \"maturityDate\""),
+                        marlowe_lang::parsing::Rule::TimeConstant => String::from("Timeout is the slot number after which the When will no longer accept any new events: Case branches will become unusable, and the contract will continue as specified by the timeout continuation. Timeouts accept templates, this means that instead of writing a specific slot number it is possible to fill Timeouts by using a template parameter that can be filled just before deploying or simulating the contract, for example: TimeParam \"maturityDate\""),
                         marlowe_lang::parsing::Rule::Close |
                         marlowe_lang::parsing::Rule::Pay |
                         marlowe_lang::parsing::Rule::Let |
@@ -172,7 +170,7 @@ impl LanguageServer for MyLSPServer {
             Some(token_list) => {
                 Ok(Some(SemanticTokensResult::Tokens(SemanticTokens{
                     result_id: Some("FULL".into()),
-                    data: token_list.iter().map(|x|x.2).collect()
+                    data: token_list.0.iter().map(|x|x.2).collect()
                 })))
             },
             None => {
@@ -187,36 +185,34 @@ impl LanguageServer for MyLSPServer {
         params: DocumentHighlightParams,
     ) -> Result<Option<Vec<DocumentHighlight>>> {
         
-        self.client
-            .log_message(MessageType::INFO, "highlighting")
-            .await;        
 
-        let mut state = self.state.lock().unwrap();
-
-        let toks = 
-            state.marlowe_asts.get_mut(
-                &params.text_document_position_params.text_document.uri);
-
-        match toks {
-            Some(tokens) => {
-                        
-                let closest = 
-                    marlowe_lang::parsing::Rule::get_token_at_position(
-                        tokens.to_vec(),params.text_document_position_params.position
-                    );
-                match closest {
-                    Some((a,_b,_c)) => {
-                        Ok(Some(vec![
-                            DocumentHighlight { 
-                                range: a,
-                                kind: Some(DocumentHighlightKind::TEXT)
-                            }]))
-                    }
-                    None => Ok(None)
+        let toks = {
+            let mut state = self.state.lock().unwrap();
+            match state.marlowe_asts.get_mut(&params.text_document_position_params.text_document.uri) {
+                None => vec![],
+                Some(semantic_tokens) => semantic_tokens.0.clone()
+            }
+            
+        };
+       
+        let closest = 
+            marlowe_lang::parsing::Rule::get_token_at_position(
+                toks.to_vec(),params.text_document_position_params.position
+            );
+        
+        match closest {
+            Some((a,rule,_c)) => {
+                {
+                    self.client.log_message(MessageType::INFO, format!("highlighting selected '{rule:?}'") ).await;        
                 }
-                
-            },
-            None => Ok(None),
+                Ok(Some(vec![
+                    DocumentHighlight { 
+                        range: a,
+                        kind: Some(DocumentHighlightKind::TEXT)
+                    }])
+                )
+            }
+            None => Ok(None)
         }
 
     }
@@ -251,7 +247,7 @@ impl LanguageServer for MyLSPServer {
         let result = {   
             let mut state = self.state.lock().unwrap();
             get_or_insert_document(&mut state, &params.text_document);
-            get_diagnostics(&mut state)
+            get_diagnostics(&mut state,&params.text_document.uri)
         };
         self.client.publish_diagnostics(
             params.text_document.uri.clone(), 
@@ -264,7 +260,7 @@ impl LanguageServer for MyLSPServer {
         let result = {
             let mut state = self.state.lock().unwrap();
             update_document(&mut state, &params.text_document.uri, params.content_changes);
-            get_diagnostics(&mut state)
+            get_diagnostics(&mut state,&params.text_document.uri)
         };
         self.client.publish_diagnostics(
             params.text_document.uri, 
@@ -280,8 +276,56 @@ impl LanguageServer for MyLSPServer {
         state.marlowe_asts.remove(&params.text_document.uri);
     }
 
-    async fn completion(&self, _completion_params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        Ok(None)
+    async fn completion(&self, completion_params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        
+        // If we ever want to do anything more than basic Role name suggestions in here,
+        // this code should be thrown out and replaced completely.
+
+        let (source,col) = {
+            let state = self.state.lock().unwrap();
+            let id = *state.sources.get(&completion_params.text_document_position.text_document.uri).unwrap();
+            let bindex = codespan_lsp_local::position_to_byte_index(
+                &state.files, id, &completion_params.text_document_position.position).unwrap();
+            let src = state.files.source(id).to_owned();
+            (src,bindex)
+        };
+
+        if col < 10 { return Ok(None) }
+
+        match source.get(col - 6 .. col) {
+            None => return Ok(None),
+            Some(prior) => 
+                if prior != "Role \"" {
+                    return Ok(None)
+                }
+        }
+
+        let mut matches : Vec<CompletionItem> = 
+            Regex::new("Role \".*\"")
+                .unwrap()
+                .find_iter(&source).map(|x|{
+                    let s = x.as_str();
+                    CompletionItem {
+                        label: if let Some(xx) = s.get(6..s.len()-1) { xx.to_string() } else { s.to_string() }, 
+                        kind: None, detail: None, 
+                        documentation: None, deprecated: None, preselect: None, sort_text: None, 
+                        filter_text: None, insert_text: None, insert_text_format: None, 
+                        insert_text_mode: None, text_edit: None, additional_text_edits: None, 
+                        command: None, commit_characters: None, data: None, tags: None }
+                }
+                ).collect();
+        
+        if matches.is_empty() {return Ok(None)}
+        matches.sort_by_key(|x|x.label.clone());
+        matches.dedup_by_key(|x|x.label.clone());
+        Ok(Some(
+            lsp_types::CompletionResponse::List(
+                CompletionList { 
+                    is_incomplete: false, 
+                    items: matches
+                }
+            )
+        ))
     }
 }
 
@@ -356,18 +400,18 @@ fn get_token_id(mar_vec:Vec<(Range, marlowe_lang::parsing::Rule, SemanticToken)>
 fn update_asts(source:String,state:&mut State,url:Url)  {
     
     let marlowe_tokens = marlowe_lang::parsing::Rule::lsp_parse(
-        &source, |_rule,_range|{0} // we don't use output from this fn atm
+        source.clone(), |_rule,_range|{0} // we don't use output from this fn atm
     );
 
     let mar_vec = 
         match &marlowe_tokens {
-            Ok(x) => x.to_vec(),
+            Ok(x) => x.0.to_vec(),
             Err(_) => vec![],
         };
 
     let sex_tokens = 
         sex::Rule::lsp_parse(
-            &source,  get_token_id(mar_vec)
+            source.clone(),  get_token_id(mar_vec)
         );
 
     match marlowe_tokens {
@@ -385,9 +429,9 @@ fn update_asts(source:String,state:&mut State,url:Url)  {
             //println!("Marlowe parser failed.. error was: \n{e:#}");
             state.marlowe_parser_error = Some((e,r));
             if state.marlowe_asts.contains_key(&url) {
-                *state.marlowe_asts.get_mut(&url).unwrap() = vec![];    
+                *state.marlowe_asts.get_mut(&url).unwrap() = (vec![],ContractValidationResult{items:vec![]});    
             } else {
-                state.marlowe_asts.insert(url.clone(),vec![]);    
+                state.marlowe_asts.insert(url.clone(),(vec![],ContractValidationResult{items:vec![]}));    
             }
 
 
@@ -410,16 +454,16 @@ fn update_asts(source:String,state:&mut State,url:Url)  {
             //println!("S-expression parser failed.. error was: \n{e:#}");
             state.sexpression_parser_error = Some((e,r));
             if state.sexpression_asts.contains_key(&url) {
-                *state.sexpression_asts.get_mut(&url).unwrap() = vec![];    
+                *state.sexpression_asts.get_mut(&url).unwrap() = (vec![],ContractValidationResult{items:vec![]}); 
             } else {
-                state.sexpression_asts.insert(url.clone(),vec![]);    
+                state.sexpression_asts.insert(url.clone(),(vec![],ContractValidationResult{items:vec![]}));    
             }
         }
     }; 
 
 }
 
-fn get_diagnostics(state:&mut State) -> Vec<Diagnostic> {
+fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
     
     let sex_diags = match &state.sexpression_parser_error {
         Some((msg,range)) => Some(Diagnostic { 
@@ -461,7 +505,154 @@ fn get_diagnostics(state:&mut State) -> Vec<Diagnostic> {
         return vec![d]
     }
 
-    vec![]
+    match state.marlowe_asts.get(url) {
+        Some(x) => {
+            x.1.items.iter().map(|d|               
+                Diagnostic { 
+                    range: d.0, 
+                    severity: Some(d.3), 
+                    code: Some(NumberOrString::String("DIAGNOSTIC".to_string())), 
+                    code_description: None, 
+                    source: None, 
+                    message: format!("{}",&d.2).to_string(),
+                    related_information: None, 
+                    tags: None, 
+                    data: None 
+                }   
+            ).collect()
+        }
+        None => vec![]
+    }
+   
+    
+    
+
+}
+
+
+#[derive(Clone)]
+struct NodeContext {
+    defined_roles : Vec<String>,
+    highest_timeout : Option<i64>
+}
+
+
+fn get_range(x:pest::iterators::Pair<marlowe_lang::parsing::Rule>) -> Range {
+    let span = x.as_span();
+    let start_pos = span.start_pos().line_col();
+    let end_pos = span.end_pos().line_col();
+    Range {
+        start : Position { line: start_pos.0 as u32 -1 , character: start_pos.1 as u32 - 1  },
+        end : Position { line: end_pos.0 as u32 -1 , character: end_pos.1 as u32 - 1},
+    }
+}
+
+
+#[derive(Debug)]
+struct ContractValidationResult {
+    items : Vec<(Range,String,String,DiagnosticSeverity)>
+}
+
+// TODO:
+// - Add Validations for:
+// - - 'The contract makes a payment from account "xxxx" before a deposit has been made. (PayBeforeDeposit)'
+// - - - ^ This includes the case where deposits have actually been made but another token was used.
+// - - - ^ So for this check we must have a context that separates the deposit values by token type.
+// - - 'The contract makes a payment of ₳ 0.000002 from account "xxx" but the account only has ₳ 0.000001. (PartialPayment)'
+// - - 'The contract makes a payment of 21  from account "xxx" but the account only has 1. (PartialPayment)'
+// - - 'The contract makes a payment of 21 ABC from account "xxx" but the account only has 1 ABC. (PartialPayment)'
+// - - - ^ The PartialPayment validations must also take the token type into account.
+fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<marlowe_lang::parsing::Rule>,context:NodeContext) -> ContractValidationResult {
+
+    let mut result = ContractValidationResult {
+        items: vec![]
+    };
+
+    while let Some(p) = pairs.next() {
+        match p.as_rule() {
+            marlowe_lang::parsing::Rule::ChoiceId => { 
+                let s = p.into_inner().next().unwrap().into_inner().next().unwrap();
+                let ss = s.as_str().to_string();
+                if !context.defined_roles.contains(&ss) {
+                    result.items.push((get_range(s),ss.clone(),format!("The choice '{}' does not seem to be valid here.. The choices that have been previously defined in this context are: {:?}. \nThe contract uses a ChoiceId that has not been input by a When, so (Constant 0) will be used.",ss,context.defined_roles),DiagnosticSeverity::WARNING));
+                }
+            }
+
+            marlowe_lang::parsing::Rule::Case => {
+                
+                let mut case = p.into_inner();
+                let mut this_case_context = context.clone();  
+                while let Some(x) = case.next() {
+                    let mut action = x.into_inner();
+                    while let Some(inner_action) = action.next() {
+                        match inner_action.as_rule() {
+                            marlowe_lang::parsing::Rule::Choice => {
+                                let mut choice = inner_action.into_inner();
+                                while let Some(x) = choice.next() {
+                                    match x.as_rule() {
+                                        marlowe_lang::parsing::Rule::ChoiceId => {
+                                            let s = x.into_inner().next().unwrap().into_inner().next().unwrap();
+                                            let ss = s.as_str().to_string();
+                                            if ! context.defined_roles.contains(&ss) {
+                                                this_case_context.defined_roles.push(ss);
+                                            }
+                                        },
+                                        marlowe_lang::parsing::Rule::ArrayOfBounds => {}
+                                        _ => unreachable!()
+                                    }
+                                }
+                            }
+                            _ => {
+                                for x in recursively_validate_contract(inner_action.into_inner(), this_case_context.clone()).items {
+                                    result.items.push(x)
+                                } 
+                            }
+                        }
+                    }
+                }
+            }
+            marlowe_lang::parsing::Rule::When => {
+
+                let mut when_contract = p.into_inner();
+                let cases = when_contract.next().unwrap().into_inner();
+                let time_out = when_contract.next().unwrap().into_inner().next().unwrap();
+                let continuation_contract = when_contract.next().unwrap().into_inner();
+                let mut sub_context = context.clone();
+                match time_out.as_rule() {
+                    marlowe_lang::parsing::Rule::TimeConstant => {
+                        match sub_context.highest_timeout {
+                            Some(highest_seen_so_far) => {
+                                let inner_value = time_out.as_str().parse::<i64>().unwrap();
+                                if inner_value > highest_seen_so_far {
+                                    sub_context.highest_timeout = Some(inner_value);
+                                    //result.push((get_range(time_out),String::new(),String::from("VERY GOOD"),DiagnosticSeverity::INFORMATION))
+                                } else {
+                                    result.items.push((get_range(time_out),String::new(),format!("Expected a timeout greater than {}",highest_seen_so_far),DiagnosticSeverity::WARNING))
+                                }
+                            },
+                            None => sub_context.highest_timeout = Some(
+                                time_out.as_str().parse::<i64>().unwrap()
+                            ),
+                        }
+                    },
+                    _ => {}
+                }
+                for x in recursively_validate_contract(cases, sub_context.clone()).items {
+                    result.items.push(x)
+                }                
+                
+                for x in recursively_validate_contract(continuation_contract, sub_context.clone()).items {
+                    result.items.push(x)
+                }
+            },
+            _ => {
+                for x in recursively_validate_contract(p.into_inner(), context.clone()).items {
+                    result.items.push(x)
+                }
+            }
+        }
+    }
+    result
 }
 
 
@@ -478,74 +669,81 @@ pub mod sex {
 // We do multiple passes (sexpress+marlowe) for parsing because it was easier to do
 // than switch from pest.rs which does not support token streaming..
 trait LSParse<T> {
-    fn lsp_parse(sample:&str,f: impl Fn(T,Range) -> u32) -> std::result::Result<Vec<(Range,T,lsp_types::SemanticToken)>,(String,lsp_types::Range)>;
+    fn lsp_parse(sample:String, f: impl Fn(T,Range) -> u32) ->
+        std::result::Result<
+            (Vec<(Range,T,lsp_types::SemanticToken)>,ContractValidationResult),
+            (String,lsp_types::Range)>;
     fn get_token_at_position(tokens:Vec<(Range,T,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<(Range,T,SemanticToken)>;
     fn get_token_info_at_position(p:Vec<(Range,T,lsp_types::SemanticToken)>,position:lsp_types::Position, f:fn(T)->String) -> Option<String>;
 }
 
-use pest::Parser;
+use pest::{Parser};
 #[macro_export]
 #[doc(hidden)]
 macro_rules! Impl_LSPARSE_For {
     
-    ($rule_type:ty,$parser_type:ty,$top_type:expr) => {
+    ($rule_type:ty,$parser_type:ty,$top_type:expr,$test:expr) => {
         impl LSParse<$rule_type> for $rule_type {
             
-            fn lsp_parse(sample:&str,f: impl Fn($rule_type,Range) -> u32) -> std::result::Result<Vec<(Range,$rule_type,lsp_types::SemanticToken)>,(String,lsp_types::Range)> {
+            fn lsp_parse(sample:String,f: impl Fn($rule_type,Range) -> u32) -> 
+                std::result::Result<
+                    (Vec<(Range,$rule_type,lsp_types::SemanticToken)>,ContractValidationResult), (String,lsp_types::Range)
+                > {
                 
                 match <$parser_type>::parse(
                     $top_type,
-                    sample.into()
+                    &sample
                 ) {
                     Ok(p) => { 
                             
-                            let mut previous_range : Option<lsp_types::Range> = None;
-                            let mut last_line_start : usize = 1;
-                            let mut last_line_end: usize = 1;
-                            let mut last_start: usize = 1;
-                            let mut last_end: usize = 1;
-            
-                            let data = 
-                                p.flatten().map(|x|{
-                                    let span = x.as_span();
-                                    let start_pos = span.start_pos();
-                                    let end_pos = span.end_pos();
-                                    let (start_line,start_col) = start_pos.line_col();
-                                    let (end_line,end_col) = end_pos.line_col();
-                                    let range = lsp_types::Range {
-                                        start: lsp_types::Position::new(start_line as u32,start_col as u32),
-                                        end:   lsp_types::Position::new(end_line as u32,end_col as u32),
-                                    };
-                                    let mut corrected_start = u32::try_from(start_pos.line_col().1).unwrap();
-                                    if start_pos.line_col().0 == last_line_start {
-                                        corrected_start = corrected_start - (last_start as u32)
-                                    } else {
-                                        corrected_start = corrected_start - 1;
-                                    }                        
-                                    let this_line_start = start_pos.line_col().0;
-                                    let calculated_length = end_pos.pos() - start_pos.pos();
-                                    let token = SemanticToken { 
-                                        // `deltaLine`: token line number, relative to the previous token
-                                        // `deltaStart`: token start character, relative to the previous token 
-                                        //  (relative to 0 or the previous token's start if they are on the same line)
-                                        // `length`: the length of the token. A token cannot be multiline.
-                                        // `tokenType`: will be looked up in `SemanticTokensLegend.tokenTypes`
-                                        // `tokenModifiers`: each set bit will be looked up in `SemanticTokensLegend.tokenModifiers`
-                                        delta_line: (this_line_start - last_line_start) as u32,
-                                        delta_start: corrected_start ,
-                                        length: calculated_length as u32,
-                                        token_type: f(x.as_rule(),range), 
-                                        token_modifiers_bitset: 0 
-                                    };
-            
-                                    (last_line_end,last_end) = end_pos.line_col();
-                                    (last_line_start,last_start) = start_pos.line_col();
-                                    previous_range = Some(range);
-                                    (range,x.as_rule(),token)
-                                }).collect();
-            
-                        Ok(data)
-            
+                        let mut previous_range : Option<lsp_types::Range> = None;
+                        let mut last_line_start : usize = 1;
+                        let mut last_line_end: usize = 1;
+                        let mut last_start: usize = 1;
+                        let mut last_end: usize = 1;
+                        
+                        let data = 
+                            p.clone().flatten().map(|x|{
+                                let span = x.as_span();
+                                let start_pos = span.start_pos();
+                                let end_pos = span.end_pos();
+                                let (start_line,start_col) = start_pos.line_col();
+                                let (end_line,end_col) = end_pos.line_col();
+                                let range = lsp_types::Range {
+                                    start: lsp_types::Position::new(start_line as u32,start_col as u32),
+                                    end:   lsp_types::Position::new(end_line as u32,end_col as u32),
+                                };
+                                let mut corrected_start = u32::try_from(start_pos.line_col().1).unwrap();
+                                if start_pos.line_col().0 == last_line_start {
+                                    corrected_start = corrected_start - (last_start as u32)
+                                } else {
+                                    corrected_start = corrected_start - 1;
+                                }                        
+                                let this_line_start = start_pos.line_col().0;
+                                let calculated_length = end_pos.pos() - start_pos.pos();
+                                let token = SemanticToken { 
+                                    // `deltaLine`: token line number, relative to the previous token
+                                    // `deltaStart`: token start character, relative to the previous token 
+                                    //  (relative to 0 or the previous token's start if they are on the same line)
+                                    // `length`: the length of the token. A token cannot be multiline.
+                                    // `tokenType`: will be looked up in `SemanticTokensLegend.tokenTypes`
+                                    // `tokenModifiers`: each set bit will be looked up in `SemanticTokensLegend.tokenModifiers`
+                                    delta_line: (this_line_start - last_line_start) as u32,
+                                    delta_start: corrected_start ,
+                                    length: calculated_length as u32,
+                                    token_type: f(x.as_rule(),range), 
+                                    token_modifiers_bitset: 0 
+                                };
+        
+                                (last_line_end,last_end) = end_pos.line_col();
+                                (last_line_start,last_start) = start_pos.line_col();
+                                previous_range = Some(range);
+                                (range,x.as_rule(),token)
+                            }).collect();
+
+                        let validation_result = $test(p);
+                        Ok((data,validation_result))
+                       
                     },
                     Err(x) => {
                         
@@ -573,75 +771,78 @@ macro_rules! Impl_LSPARSE_For {
                     }
                 }
             
-            fn get_token_at_position(tokens:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<(Range,$rule_type,SemanticToken)> {
-                let line = position.line + 1;
-                let char = position.character + 1;
-                let mut currently_closest : Option<(Range,$rule_type,SemanticToken)> = None;
-                let mut filtered = 
-                    tokens.iter().filter(|(range,_rule,_token)|{    
-                        if range.start.line > line || (range.start.line == line && range.start.character > char) {
-                            return false
-                        }
-                        true
-                    });
-                while let Some(current) = filtered.next() {
-                    match &currently_closest {
-                        Some(currently_closest_item) => {
-                            let previous_start = currently_closest_item.0.start;
-                            let previous_end = currently_closest_item.0.end;
-                            let start_pos = current.0.start;
-                            let end_pos = current.0.end;
-                            if start_pos >= previous_start || end_pos <= previous_end {
-                                currently_closest = Some(*current)
+                fn get_token_at_position(tokens:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<(Range,$rule_type,SemanticToken)> {
+                    let line = position.line + 1;
+                    let char = position.character + 1;
+                    let mut currently_closest : Option<(Range,$rule_type,SemanticToken)> = None;
+                    let mut filtered = 
+                        tokens.iter().filter(|(range,_rule,_token)|{    
+                            if range.start.line > line || (range.start.line == line && range.start.character > char) {
+                                return false
                             }
-            
-                        },
-                        None => {
-                            currently_closest = Some(*current)
-                        },
+                            true
+                        });
+                    while let Some(current) = filtered.next() {
+                        match &currently_closest {
+                            Some(currently_closest_item) => {
+                                let previous_start = currently_closest_item.0.start;
+                                let previous_end = currently_closest_item.0.end;
+                                let start_pos = current.0.start;
+                                let end_pos = current.0.end;
+                                if start_pos >= previous_start || end_pos <= previous_end {
+                                    currently_closest = Some(*current)
+                                }
+                
+                            },
+                            None => {
+                                currently_closest = Some(*current)
+                            },
+                        }
+                    }
+                    
+                    match currently_closest {
+                        None => None,
+                        Some((a,b,c)) => {
+                            Some((Range {
+                                start: Position {
+                                    character: a.start.character - 1,
+                                    line: a.start.line - 1
+                                },
+                                end: Position {
+                                    character: a.end.character - 1,
+                                    line: a.end.line - 1
+                                }
+                            },b,c))
+                        }
                     }
                 }
                 
-                match currently_closest {
-                    None => None,
-                    Some((a,b,c)) => {
-                        Some((Range {
-                            start: Position {
-                                character: a.start.character - 1,
-                                line: a.start.line - 1
-                            },
-                            end: Position {
-                                character: a.end.character - 1,
-                                line: a.end.line - 1
-                            }
-                        },b,c))
-                    }
+                fn get_token_info_at_position(p:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position, f:fn($rule_type)->String) -> Option<String> {
+                    match Self::get_token_at_position(p,position) {
+                            Some(ooh) => Some(f(ooh.1)),
+                            None => None
+                    }    
                 }
-            }
             
-            fn get_token_info_at_position(p:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position, f:fn($rule_type)->String) -> Option<String> {
-                match Self::get_token_at_position(p,position) {
-                        Some(ooh) => Some(f(ooh.1)),
-                        None => None
-                }    
             }
-        
         }
     }
-}
-
-
+    
 
 Impl_LSPARSE_For!(
     sex::Rule,
     sex::SexParser,
-    sex::Rule::expressions
+    sex::Rule::expressions,
+    |_| ContractValidationResult { items: vec![] }
 );
 
 Impl_LSPARSE_For!(
     marlowe_lang::parsing::Rule,
     marlowe_lang::parsing::MarloweParser,
-    marlowe_lang::parsing::Rule::Contract
+    marlowe_lang::parsing::Rule::Contract,
+    |x| {
+        recursively_validate_contract(x, NodeContext { defined_roles: vec![], highest_timeout: None })
+    }
 );
 
 
