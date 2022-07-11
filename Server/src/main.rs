@@ -4,10 +4,22 @@ mod codespan_lsp_local;
 use codespan::FileId;
 use codespan_lsp_local::{range_to_byte_span};
 use regex::{Regex};
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, sync::Mutex, hash::Hash};
 use serde_json::Value;
 use tower_lsp::{ jsonrpc::{Result}, Client, LanguageServer, LspService, Server };
 use tower_lsp::lsp_types::*;
+use line_col::LineColLookup;
+
+use lsp_types::{SemanticToken, Range};
+use pest_derive::Parser;
+
+pub mod sex {
+    use super::*;
+    #[derive(Parser)]
+    #[grammar = "../sex.grammars"]
+    pub struct SexParser;
+}
+
 
 #[derive(Debug)]
 struct MyLSPServer {
@@ -25,6 +37,16 @@ struct State {
     sexpression_parser_error: Option<(String,Range)>
     
 }
+
+// TODO:
+
+// Add support for get_diagnostics function to return 
+// suggestions for auto_resolving things like when a value
+// can be simplified from MulVal(2,2) into just Constant 4..
+
+// Add support for ?party/?payee?/?contract/ etc.. holes
+// such that we can autosuggest items to use,
+// so that we can handle copy-pasted contracts from playground.
 
 #[tower_lsp::async_trait]
 impl LanguageServer for MyLSPServer {
@@ -243,7 +265,6 @@ impl LanguageServer for MyLSPServer {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        
         let result = {   
             let mut state = self.state.lock().unwrap();
             get_or_insert_document(&mut state, &params.text_document);
@@ -257,11 +278,12 @@ impl LanguageServer for MyLSPServer {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        
         let result = {
             let mut state = self.state.lock().unwrap();
             update_document(&mut state, &params.text_document.uri, params.content_changes);
             get_diagnostics(&mut state,&params.text_document.uri)
-        };
+        };  
         self.client.publish_diagnostics(
             params.text_document.uri, 
             result, 
@@ -408,7 +430,7 @@ fn update_asts(source:String,state:&mut State,url:Url)  {
             Ok(x) => x.0.to_vec(),
             Err(_) => vec![],
         };
-
+        
     let sex_tokens = 
         sex::Rule::lsp_parse(
             source.clone(),  get_token_id(mar_vec)
@@ -436,8 +458,8 @@ fn update_asts(source:String,state:&mut State,url:Url)  {
 
 
 
-        }
-    };  
+         }
+     };  
 
     match sex_tokens {
         Ok(tokens) => {
@@ -465,29 +487,30 @@ fn update_asts(source:String,state:&mut State,url:Url)  {
 
 fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
     
-    let sex_diags = match &state.sexpression_parser_error {
-        Some((msg,range)) => Some(Diagnostic { 
-            range: range.clone(), 
-            severity: None, 
-            code: Some(NumberOrString::String("S-Expression parser error".to_string())),  
-            code_description: None, 
-            source: None,
-            message: msg.to_string(), 
-            related_information: None,
-            tags: None,
-            data: None
-        }),
-        None => None,
+    match &state.sexpression_parser_error {
+        None => {},
+        Some((msg,range)) => {
+            return vec![
+                Diagnostic { 
+                    range: range.clone(), 
+                    severity: None, 
+                    code: Some(NumberOrString::String("S-Expression parser error".to_string())),  
+                    code_description: None, 
+                    source: None,
+                    message: msg.to_string(), 
+                    related_information: None,
+                    tags: None,
+                    data: None
+                }    
+            ];
+        }
     };
 
-    if let Some(d) = sex_diags {
-        return vec![d]
-    }
     
-    let marlowe_diags = match &state.marlowe_parser_error {
-        Some((msg,range)) => {
-            //println!("GOT DIAG ERROR FOR MARLOWE WITH RANGE: {range:?}");
-            Some(Diagnostic { 
+    match &state.marlowe_parser_error {
+        None => {},
+        Some((msg,range)) => 
+            return vec![Diagnostic { 
                 range: range.clone(), 
                 severity: None, 
                 code: Some(NumberOrString::String("Marlowe parser error".to_string())), 
@@ -497,14 +520,9 @@ fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
                 related_information: None, 
                 tags: None, 
                 data: None 
-            })},
-        None => None,
+            }]
     };
     
-    if let Some(d) = marlowe_diags {
-        return vec![d]
-    }
-
     match state.marlowe_asts.get(url) {
         Some(x) => {
             x.1.items.iter().map(|d|               
@@ -514,7 +532,7 @@ fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
                     code: Some(NumberOrString::String("DIAGNOSTIC".to_string())), 
                     code_description: None, 
                     source: None, 
-                    message: format!("{}",&d.2).to_string(),
+                    message: d.2.to_owned(),
                     related_information: None, 
                     tags: None, 
                     data: None 
@@ -530,11 +548,7 @@ fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
 }
 
 
-#[derive(Clone)]
-struct NodeContext {
-    defined_roles : Vec<String>,
-    highest_timeout : Option<i64>
-}
+
 
 
 fn get_range(x:pest::iterators::Pair<marlowe_lang::parsing::Rule>) -> Range {
@@ -547,22 +561,72 @@ fn get_range(x:pest::iterators::Pair<marlowe_lang::parsing::Rule>) -> Range {
     }
 }
 
-
 #[derive(Debug)]
 struct ContractValidationResult {
     items : Vec<(Range,String,String,DiagnosticSeverity)>
 }
 
+#[derive(Clone,Default,Debug)]
+struct TokenType {
+    currency_symbol : String ,
+    token_name : String
+}
+
+#[derive(Clone,Default,Debug)]
+struct AccountInfo {
+    token_amounts : HashMap<TokenType,i64>
+}
+
+#[derive(Clone)]
+enum VariableAssignment {
+    Constant(i64),
+    VariablePointer(String)
+}
+
+#[derive(Clone)]
+struct NodeContext {
+    defined_roles : Vec<String>,
+    highest_timeout : Option<i64>,
+    known_accounts : HashMap<String,AccountInfo>,
+    let_assigns : HashMap<String,VariableAssignment>
+}
+
+fn parse_a_value() {
+    // todo take a marlowe value and recursively process it.
+    // return option type (since we cannot know the value should it be based on runtime variabled).
+    // return also option string with warning should the thing be possibly to simplify.
+}
+
+fn parse_a_let_assignment() {
+    // todo take a marlowe value and recursively process it.
+    // return option type (since we cannot know the value should it be based on runtime variabled).
+    // return also option string with warning should the thing be possibly to simplify.
+}
+
 // TODO:
-// - Add Validations for:
+
 // - - 'The contract makes a payment from account "xxxx" before a deposit has been made. (PayBeforeDeposit)'
 // - - - ^ This includes the case where deposits have actually been made but another token was used.
 // - - - ^ So for this check we must have a context that separates the deposit values by token type.
+
 // - - 'The contract makes a payment of ₳ 0.000002 from account "xxx" but the account only has ₳ 0.000001. (PartialPayment)'
 // - - 'The contract makes a payment of 21  from account "xxx" but the account only has 1. (PartialPayment)'
 // - - 'The contract makes a payment of 21 ABC from account "xxx" but the account only has 1 ABC. (PartialPayment)'
 // - - - ^ The PartialPayment validations must also take the token type into account.
-fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<marlowe_lang::parsing::Rule>,context:NodeContext) -> ContractValidationResult {
+
+// - - 'The value "(MulValue (Constant 10) (Constant 10))" can be simplified to "(Constant 100)" (SimplifiableValue).
+// - - - ^ This just means that a value consist entierly out of static values.
+
+// - - 'The contract uses a ValueId that has not been defined in a Let, so (Constant 0) will be used. (UndefinedUse).
+// - - - ^ Add LET assignments to context and validate in UseVal values!
+
+// - - Find continuations of type close where we end up implicitly refunding assets
+
+// - - Find bool statements that will always evalutate to true/false causing sub-contracts
+//     to be unreachable.
+
+#[decurse::decurse]
+fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<'static,marlowe_lang::parsing::Rule>,context:NodeContext) -> ContractValidationResult {
 
     let mut result = ContractValidationResult {
         items: vec![]
@@ -570,6 +634,7 @@ fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<marlowe_lang::
 
     while let Some(p) = pairs.next() {
         match p.as_rule() {
+            
             marlowe_lang::parsing::Rule::ChoiceId => { 
                 let s = p.into_inner().next().unwrap().into_inner().next().unwrap();
                 let ss = s.as_str().to_string();
@@ -586,6 +651,27 @@ fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<marlowe_lang::
                     let mut action = x.into_inner();
                     while let Some(inner_action) = action.next() {
                         match inner_action.as_rule() {
+                            // todo: update the context account information
+                            marlowe_lang::parsing::Rule::Deposit => {
+                                let mut pairs = inner_action.into_inner();
+                                let by = pairs.next().unwrap();
+                                let into_account_of = pairs.next().unwrap();
+                                let currency = pairs.next().unwrap();
+                                let amount = pairs.next().unwrap();
+                                // todo: handle adding to context
+                                // if the amount is a parameter, we cannot know anything now
+                                // let mut hmm = this_case_context.known_accounts.entry("BANKEN".to_owned()).or_default();
+                                // let v = hmm.token_amounts.entry("ADA".to_string()).or_default();
+                                // *v += 100;
+
+                                for x in recursively_validate_contract(by.into_inner(), this_case_context.clone()).items {
+                                    result.items.push(x)
+                                } 
+                                for x in recursively_validate_contract(into_account_of.into_inner(), this_case_context.clone()).items {
+                                    result.items.push(x)
+                                } 
+
+                            }
                             marlowe_lang::parsing::Rule::Choice => {
                                 let mut choice = inner_action.into_inner();
                                 while let Some(x) = choice.next() {
@@ -609,6 +695,40 @@ fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<marlowe_lang::
                             }
                         }
                     }
+                }
+            }
+            // todo: validate against the context account info
+            marlowe_lang::parsing::Rule::Pay => {
+                let mut pay_contract = p.into_inner();
+                let party = pay_contract.next().unwrap().into_inner();
+                let payee = pay_contract.next().unwrap().into_inner();
+                let _currency = pay_contract.next().unwrap().into_inner().next().unwrap();
+                let _amount = pay_contract.next().unwrap().into_inner().next().unwrap();
+                let continuation_contract = pay_contract.next().unwrap().into_inner();
+                let sub_context = context.clone();
+
+                //let acc = sub_context.known_accounts.get("BANKEN").unwrap();
+                
+                // result.items.push((
+                //     get_range(amount.clone()),
+                //     String::new(),
+                //     format!("This is: (currency: {} , amount: {}). CONTEXT NOW IS: {:?}",currency.as_str(),amount.as_str(), wooo)
+                //     ,DiagnosticSeverity::INFORMATION
+                // ));
+
+                // validate party against outer context
+                for x in recursively_validate_contract(party, context.clone()).items {
+                    result.items.push(x)
+                }
+                
+                // validate payee against outer context
+                for x in recursively_validate_contract(payee, context.clone()).items {
+                    result.items.push(x)
+                }
+
+                // validate sub-contract using the updated inner context
+                for x in recursively_validate_contract(continuation_contract, sub_context.clone()).items {
+                    result.items.push(x)
                 }
             }
             marlowe_lang::parsing::Rule::When => {
@@ -656,16 +776,6 @@ fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<marlowe_lang::
 }
 
 
-use lsp_types::{SemanticToken, Range};
-use pest_derive::Parser;
-
-pub mod sex {
-    use super::*;
-    #[derive(Parser)]
-    #[grammar = "../sex.grammars"]
-    pub struct SexParser;
-}
-
 // We do multiple passes (sexpress+marlowe) for parsing because it was easier to do
 // than switch from pest.rs which does not support token streaming..
 trait LSParse<T> {
@@ -683,19 +793,21 @@ use pest::{Parser};
 macro_rules! Impl_LSPARSE_For {
     
     ($rule_type:ty,$parser_type:ty,$top_type:expr,$test:expr) => {
+        
         impl LSParse<$rule_type> for $rule_type {
             
             fn lsp_parse(sample:String,f: impl Fn($rule_type,Range) -> u32) -> 
                 std::result::Result<
                     (Vec<(Range,$rule_type,lsp_types::SemanticToken)>,ContractValidationResult), (String,lsp_types::Range)
                 > {
-                
+                let boxed = Box::new(sample.clone());
+                let lookup = LineColLookup::new(&sample);
                 match <$parser_type>::parse(
                     $top_type,
-                    &sample
+                    Box::leak(boxed)
                 ) {
                     Ok(p) => { 
-                            
+                        
                         let mut previous_range : Option<lsp_types::Range> = None;
                         let mut last_line_start : usize = 1;
                         let mut last_line_end: usize = 1;
@@ -705,22 +817,26 @@ macro_rules! Impl_LSPARSE_For {
                         let data = 
                             p.clone().flatten().map(|x|{
                                 let span = x.as_span();
-                                let start_pos = span.start_pos();
-                                let end_pos = span.end_pos();
-                                let (start_line,start_col) = start_pos.line_col();
-                                let (end_line,end_col) = end_pos.line_col();
+                                let start_pos = span.start();
+                                let end_pos = span.end();
+                                
+                                let (start_line,start_col) = lookup.get(start_pos);
+                                let (end_line,end_col) = lookup.get(end_pos);
+                                
                                 let range = lsp_types::Range {
                                     start: lsp_types::Position::new(start_line as u32,start_col as u32),
                                     end:   lsp_types::Position::new(end_line as u32,end_col as u32),
                                 };
-                                let mut corrected_start = u32::try_from(start_pos.line_col().1).unwrap();
-                                if start_pos.line_col().0 == last_line_start {
-                                    corrected_start = corrected_start - (last_start as u32)
+                                let mut corrected_start = start_col as usize;
+                                if start_line == last_line_start {
+                                    corrected_start = corrected_start - last_start;
+                                    
                                 } else {
                                     corrected_start = corrected_start - 1;
-                                }                        
-                                let this_line_start = start_pos.line_col().0;
-                                let calculated_length = end_pos.pos() - start_pos.pos();
+                                }       
+                                let corrected_line = (start_line - last_line_start);
+                                let calculated_length = span.as_str().len();
+
                                 let token = SemanticToken { 
                                     // `deltaLine`: token line number, relative to the previous token
                                     // `deltaStart`: token start character, relative to the previous token 
@@ -728,15 +844,15 @@ macro_rules! Impl_LSPARSE_For {
                                     // `length`: the length of the token. A token cannot be multiline.
                                     // `tokenType`: will be looked up in `SemanticTokensLegend.tokenTypes`
                                     // `tokenModifiers`: each set bit will be looked up in `SemanticTokensLegend.tokenModifiers`
-                                    delta_line: (this_line_start - last_line_start) as u32,
-                                    delta_start: corrected_start ,
+                                    delta_line: corrected_line as u32,
+                                    delta_start: corrected_start as u32 ,
                                     length: calculated_length as u32,
                                     token_type: f(x.as_rule(),range), 
                                     token_modifiers_bitset: 0 
                                 };
         
-                                (last_line_end,last_end) = end_pos.line_col();
-                                (last_line_start,last_start) = start_pos.line_col();
+                                (last_line_end,last_end) = (end_line,end_col);
+                                (last_line_start,last_start) = (start_line,start_col);
                                 previous_range = Some(range);
                                 (range,x.as_rule(),token)
                             }).collect();
@@ -841,7 +957,12 @@ Impl_LSPARSE_For!(
     marlowe_lang::parsing::MarloweParser,
     marlowe_lang::parsing::Rule::Contract,
     |x| {
-        recursively_validate_contract(x, NodeContext { defined_roles: vec![], highest_timeout: None })
+        recursively_validate_contract(x, NodeContext { 
+            defined_roles: vec![], 
+            highest_timeout: None , 
+            known_accounts: HashMap::new(),
+            let_assigns : HashMap::new()
+        })
     }
 );
 

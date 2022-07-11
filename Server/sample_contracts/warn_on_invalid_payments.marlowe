@@ -1,0 +1,40 @@
+When
+    [Case
+        (Deposit
+            (Role "Seller1")
+            (Role "KALLE")
+            (Token "" "")
+            (Constant 1)
+        )
+        (Pay
+            (Role "Seller1")
+            (Party (Role "Seller"))
+            (Token "" "")
+            (Constant 1)
+            Close 
+        ), Case
+        (Deposit
+            (Role "Seller2")
+            (Role "Seller")
+            (Token "" "")
+            (Constant 1)
+        )
+        (If
+            TrueObs 
+            (Pay
+                (Role "Seller1")
+                (Party (Role "Seller"))
+                (Token "" "")
+                (Constant 1)
+                Close 
+            )
+            (Pay
+                (Role "Seller2")
+                (Party (Role "Seller"))
+                (Token "" "")
+                (Constant 1)
+                Close 
+            )
+        )]
+    (TimeParam "Collateral deposit by seller timeout")
+    Close 
