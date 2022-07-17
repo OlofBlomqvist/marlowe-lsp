@@ -661,19 +661,30 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
 
                     }
                     _ => {
-                        // nothing here can change the context (ie. holes or notifies)
+                        // nothing here can change the context 
                     }
                 }
 
                 // -- PERFORM ALL SUB-VALIDATIONS ----------------------
 
-                // Validate the action contents
-                let action_results = recursively_validate_contract(action.into_inner(), sub_context_for_this_case.clone()).items;    
-                for item in action_results { result.items.push (item) }
+                // Because we captured this node, we are responsible for displaying a message if this should be a hole
+                if continuation_contract.as_rule() == Rule::ContractHole {
+                    write_note(&continuation_contract,"Found a hole of type 'Contract': The continuation contract for this case is missing.",DiagnosticSeverity::WARNING);
+                } 
+
+                // Because we captured this node, we are responsible for displaying a message if this should be a hole
+                if action.as_rule() == Rule::ActionHole {
+                    write_note(&action,"Found a hole of type 'Action'.",DiagnosticSeverity::WARNING);
+                }
 
                 // Validate the continuation
                 let continuation_contract_results = recursively_validate_contract(continuation_contract.into_inner(), sub_context_for_this_case.clone()).items;    
                 for item in continuation_contract_results { result.items.push (item) }
+            
+                // Validate the action contents
+                let action_results = recursively_validate_contract(action.into_inner(), sub_context_for_this_case.clone()).items;    
+                for item in action_results { result.items.push (item) }
+
             }
             Rule::When => {
                 
@@ -720,7 +731,11 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
                         // currently, we don't need any validation on other timeout types nor their childen..
                     }
                 }
-                
+
+                // Because we captured this node, we are responsible for displaying a message if this should be a hole
+                if continuation_contract.as_rule() == Rule::ContractHole {
+                    write_note(&continuation_contract,"Found a hole of type 'Contract (Continuation)'. What should happen if this 'When' contract times out?",DiagnosticSeverity::WARNING);
+                } 
 
                 // Validate all cases:
                 let case_list_results = recursively_validate_contract(case_list.into_inner(), sub_context_for_this_when_contract.clone()).items;    
