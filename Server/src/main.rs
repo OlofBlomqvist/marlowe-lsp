@@ -3,13 +3,13 @@
 mod codespan_lsp_local;
 use codespan::FileId;
 use codespan_lsp_local::{range_to_byte_span};
+use marlowe_lang::{parsing::Rule};
 use regex::{Regex};
 use std::{collections::HashMap, sync::Mutex, hash::Hash};
 use serde_json::Value;
 use tower_lsp::{ jsonrpc::{Result}, Client, LanguageServer, LspService, Server };
 use tower_lsp::lsp_types::*;
 use line_col::LineColLookup;
-
 use lsp_types::{SemanticToken, Range};
 use pest_derive::Parser;
 
@@ -19,7 +19,6 @@ pub mod sex {
     #[grammar = "../sex.grammars"]
     pub struct SexParser;
 }
-
 
 #[derive(Debug)]
 struct MyLSPServer {
@@ -114,7 +113,11 @@ impl LanguageServer for MyLSPServer {
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         
-        let state = self.state.lock().unwrap();
+        let state = match self.state.lock() {
+            Err(e) => return Ok(None),
+            Ok(l) => l
+        };
+
         match state.marlowe_asts.get(&params.text_document_position_params.text_document.uri) {
             Some(token_list) => {
                 let closest = marlowe_lang::parsing::Rule::get_token_info_at_position(
@@ -186,7 +189,10 @@ impl LanguageServer for MyLSPServer {
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
         
-        let state = self.state.lock().unwrap();
+        let state = match self.state.lock() {
+            Err(e) => return Ok(None),
+            Ok(l) => l
+        };
 
         match state.sexpression_asts.get(&params.text_document.uri) {
             Some(token_list) => {
@@ -566,213 +572,216 @@ struct ContractValidationResult {
     items : Vec<(Range,String,String,DiagnosticSeverity)>
 }
 
-#[derive(Clone,Default,Debug)]
-struct TokenType {
-    currency_symbol : String ,
-    token_name : String
-}
+// #[derive(Clone,Default,Debug)]
+// struct TokenType {
+//     currency_symbol : String ,
+//     token_name : String
+// }
 
-#[derive(Clone,Default,Debug)]
-struct AccountInfo {
-    token_amounts : HashMap<TokenType,i64>
-}
+// #[derive(Clone,Default,Debug)]
+// struct AccountInfo {
+//     token_amounts : HashMap<TokenType,i64>
+// }
 
-#[derive(Clone)]
-enum VariableAssignment {
-    Constant(i64),
-    VariablePointer(String)
-}
+// #[derive(Clone)]
+// enum VariableAssignment {
+//     Constant(i64),
+//     VariablePointer(String)
+// }
 
 #[derive(Clone)]
 struct NodeContext {
-    defined_roles : Vec<String>,
+    //defined_roles : Vec<String>,
     highest_timeout : Option<i64>,
-    known_accounts : HashMap<String,AccountInfo>,
-    let_assigns : HashMap<String,VariableAssignment>
+    //known_accounts : HashMap<String,AccountInfo>,
+    //let_assigns : HashMap<String,VariableAssignment>,
+    choices: Vec<String>
 }
-
-fn parse_a_value() {
-    // todo take a marlowe value and recursively process it.
-    // return option type (since we cannot know the value should it be based on runtime variabled).
-    // return also option string with warning should the thing be possibly to simplify.
-}
-
-fn parse_a_let_assignment() {
-    // todo take a marlowe value and recursively process it.
-    // return option type (since we cannot know the value should it be based on runtime variabled).
-    // return also option string with warning should the thing be possibly to simplify.
-}
-
-// TODO:
-
-// - - 'The contract makes a payment from account "xxxx" before a deposit has been made. (PayBeforeDeposit)'
-// - - - ^ This includes the case where deposits have actually been made but another token was used.
-// - - - ^ So for this check we must have a context that separates the deposit values by token type.
-
-// - - 'The contract makes a payment of ₳ 0.000002 from account "xxx" but the account only has ₳ 0.000001. (PartialPayment)'
-// - - 'The contract makes a payment of 21  from account "xxx" but the account only has 1. (PartialPayment)'
-// - - 'The contract makes a payment of 21 ABC from account "xxx" but the account only has 1 ABC. (PartialPayment)'
-// - - - ^ The PartialPayment validations must also take the token type into account.
-
-// - - 'The value "(MulValue (Constant 10) (Constant 10))" can be simplified to "(Constant 100)" (SimplifiableValue).
-// - - - ^ This just means that a value consist entierly out of static values.
-
-// - - 'The contract uses a ValueId that has not been defined in a Let, so (Constant 0) will be used. (UndefinedUse).
-// - - - ^ Add LET assignments to context and validate in UseVal values!
-
-// - - Find continuations of type close where we end up implicitly refunding assets
-
-// - - Find bool statements that will always evalutate to true/false causing sub-contracts
-//     to be unreachable.
 
 #[decurse::decurse]
-fn recursively_validate_contract(mut pairs:pest::iterators::Pairs<'static,marlowe_lang::parsing::Rule>,context:NodeContext) -> ContractValidationResult {
+fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_lang::parsing::Rule>,context:NodeContext) -> ContractValidationResult {
+    
+    let mut result = ContractValidationResult { items: vec![] };
+    let mut my_instance = pairs.clone();
 
-    let mut result = ContractValidationResult {
-        items: vec![]
-    };
+    while let Some(x) = my_instance.next() {
 
-    while let Some(p) = pairs.next() {
-        match p.as_rule() {
+        let mut write_note = |xxx:&pest::iterators::Pair<Rule>,s:&str,v:DiagnosticSeverity| {
+            result.items.push((get_range(xxx.clone()),String::new(),s.to_string(),v))
+        };
+        match x.as_rule() {
             
-            marlowe_lang::parsing::Rule::ChoiceId => { 
-                let s = p.into_inner().next().unwrap().into_inner().next().unwrap();
-                let ss = s.as_str().to_string();
-                if !context.defined_roles.contains(&ss) {
-                    result.items.push((get_range(s),ss.clone(),format!("The choice '{}' does not seem to be valid here.. The choices that have been previously defined in this context are: {:?}. \nThe contract uses a ChoiceId that has not been input by a When, so (Constant 0) will be used.",ss,context.defined_roles),DiagnosticSeverity::WARNING));
-                }
-            }
-
-            marlowe_lang::parsing::Rule::Case => {
+            Rule::Case => {
                 
-                let mut case = p.into_inner();
-                let mut this_case_context = context.clone();  
-                while let Some(x) = case.next() {
-                    let mut action = x.into_inner();
-                    while let Some(inner_action) = action.next() {
-                        match inner_action.as_rule() {
-                            // todo: update the context account information
-                            marlowe_lang::parsing::Rule::Deposit => {
-                                let mut pairs = inner_action.into_inner();
-                                let by = pairs.next().unwrap();
-                                let into_account_of = pairs.next().unwrap();
-                                let currency = pairs.next().unwrap();
-                                let amount = pairs.next().unwrap();
-                                // todo: handle adding to context
-                                // if the amount is a parameter, we cannot know anything now
-                                // let mut hmm = this_case_context.known_accounts.entry("BANKEN".to_owned()).or_default();
-                                // let v = hmm.token_amounts.entry("ADA".to_string()).or_default();
-                                // *v += 100;
+                // Cases consist of an action and a continuation contract.
+                // There are currently three possible actions available:
+                // - Deposit <-- This changes our context
+                // - Choice <-- This changes our context
+                // - Notify <-- Just needs to be validated as usual
 
-                                for x in recursively_validate_contract(by.into_inner(), this_case_context.clone()).items {
-                                    result.items.push(x)
-                                } 
-                                for x in recursively_validate_contract(into_account_of.into_inner(), this_case_context.clone()).items {
-                                    result.items.push(x)
-                                } 
+                // In the case of an action being a deposit, we must register it in our context
+                // so that we can validate against it in sub-nodes.
 
-                            }
-                            marlowe_lang::parsing::Rule::Choice => {
-                                let mut choice = inner_action.into_inner();
-                                while let Some(x) = choice.next() {
-                                    match x.as_rule() {
-                                        marlowe_lang::parsing::Rule::ChoiceId => {
-                                            let s = x.into_inner().next().unwrap().into_inner().next().unwrap();
-                                            let ss = s.as_str().to_string();
-                                            if ! context.defined_roles.contains(&ss) {
-                                                this_case_context.defined_roles.push(ss);
-                                            }
-                                        },
-                                        marlowe_lang::parsing::Rule::ArrayOfBounds => {}
-                                        _ => unreachable!()
-                                    }
-                                }
-                            }
-                            _ => {
-                                for x in recursively_validate_contract(inner_action.into_inner(), this_case_context.clone()).items {
-                                    result.items.push(x)
-                                } 
-                            }
+                // Should this be a Choice, we also register the choise so that we can
+                // validate against possible choices in sub-nodes.
+
+                // We will validate the continuation of the case as usual, with
+                // the case-local context (possibly affected by deposit or choice).
+
+                let mut sub_context_for_this_case = context.clone();
+                let mut case = x.into_inner();
+                let action = case.next().unwrap();
+                let continuation_contract = case.next().unwrap();
+
+                // -- PERFORM ALL CONTEXT MUTATIONS --------------------
+                match action.as_rule() {
+                    Rule::Deposit => {
+                        // We clone this here because we still want to perform the normal validation
+                        // let mut cloned_deposit = action.clone().into_inner();
+                        // A deposit was made. Update the context with information regarding the known
+                        // values of source and target accounts such that we can validate against it 
+                        // in child-nodes. This is so that we can know if a payment can be made or not later.
+                        // TODO: Add support for account context validation!
+                    },
+                    Rule::Choice => {
+                        // We clone this here because we still want to perform the normal validation
+                        let mut cloned_choice = action.clone().into_inner();
+                        // A (possibly) new choice was made. Register it in the list of available choice values
+                        // such that we can validate against it in child-nodes.
+
+                        let mut choice_id = cloned_choice.next().unwrap().into_inner(); // choice_id can never be a hole.
+                        let choice_name = choice_id.next().unwrap();
+                        let choice_name_value = choice_name.as_str().to_string(); // Strings cannot be holes.
+                        let party = choice_id.next().unwrap(); // party can be a hole.
+                        let who_done_it = party.as_str();
+                        
+                        if !sub_context_for_this_case.choices.contains(&choice_name_value) {
+                            sub_context_for_this_case.choices.push(choice_name_value+who_done_it)
                         }
+
+                    }
+                    _ => {
+                        // nothing here can change the context (ie. holes or notifies)
                     }
                 }
+
+                // -- PERFORM ALL SUB-VALIDATIONS ----------------------
+
+                // Validate the action contents
+                let action_results = recursively_validate_contract(action.into_inner(), sub_context_for_this_case.clone()).items;    
+                for item in action_results { result.items.push (item) }
+
+                // Validate the continuation
+                let continuation_contract_results = recursively_validate_contract(continuation_contract.into_inner(), sub_context_for_this_case.clone()).items;    
+                for item in continuation_contract_results { result.items.push (item) }
             }
-            // todo: validate against the context account info
-            marlowe_lang::parsing::Rule::Pay => {
-                let mut pay_contract = p.into_inner();
-                let party = pay_contract.next().unwrap().into_inner();
-                let payee = pay_contract.next().unwrap().into_inner();
-                let _currency = pay_contract.next().unwrap().into_inner().next().unwrap();
-                let _amount = pay_contract.next().unwrap().into_inner().next().unwrap();
-                let continuation_contract = pay_contract.next().unwrap().into_inner();
-                let sub_context = context.clone();
-
-                //let acc = sub_context.known_accounts.get("BANKEN").unwrap();
+            Rule::When => {
                 
-                // result.items.push((
-                //     get_range(amount.clone()),
-                //     String::new(),
-                //     format!("This is: (currency: {} , amount: {}). CONTEXT NOW IS: {:?}",currency.as_str(),amount.as_str(), wooo)
-                //     ,DiagnosticSeverity::INFORMATION
-                // ));
-
-                // validate party against outer context
-                for x in recursively_validate_contract(party, context.clone()).items {
-                    result.items.push(x)
-                }
+                // A when contract node has three arguments, in this order:
+                // ArrayOfCases ~ Timeout ~ WrappedContract.
+                let mut when_contract = x.into_inner();
+                let case_list = when_contract.next().unwrap();
+                let timeout = when_contract.next().unwrap();
+                let continuation_contract = when_contract.next().unwrap();
                 
-                // validate payee against outer context
-                for x in recursively_validate_contract(payee, context.clone()).items {
-                    result.items.push(x)
-                }
+                // If a when contract has a timeout of type Constant,
+                // we will validate it against the context and also add it to the context
+                // so that all cases inside of the when are validated against it
+                // and also the timeout_continuation contract must be validated using that context.
 
-                // validate sub-contract using the updated inner context
-                for x in recursively_validate_contract(continuation_contract, sub_context.clone()).items {
-                    result.items.push(x)
-                }
-            }
-            marlowe_lang::parsing::Rule::When => {
+                let mut sub_context_for_this_when_contract = context.clone();
 
-                let mut when_contract = p.into_inner();
-                let cases = when_contract.next().unwrap().into_inner();
-                let time_out = when_contract.next().unwrap().into_inner().next().unwrap();
-                let continuation_contract = when_contract.next().unwrap().into_inner();
-                let mut sub_context = context.clone();
-                match time_out.as_rule() {
-                    marlowe_lang::parsing::Rule::TimeConstant => {
-                        match sub_context.highest_timeout {
-                            Some(highest_seen_so_far) => {
-                                let inner_value = time_out.as_str().parse::<i64>().unwrap();
-                                if inner_value > highest_seen_so_far {
-                                    sub_context.highest_timeout = Some(inner_value);
-                                    //result.push((get_range(time_out),String::new(),String::from("VERY GOOD"),DiagnosticSeverity::INFORMATION))
-                                } else {
-                                    result.items.push((get_range(time_out),String::new(),format!("Expected a timeout greater than {}",highest_seen_so_far),DiagnosticSeverity::WARNING))
+                // Validate the timeout:
+                match timeout.as_rule() {
+                    Rule::TimeConstant => {
+                        match timeout.as_str().parse::<i64>() {
+                            Ok(this_timeout_value) => {
+                                match context.highest_timeout {
+                                    Some(highest_seen_so_far) if highest_seen_so_far > this_timeout_value => {
+                                        write_note(&timeout,&format!("Timeouts should always increase. This value ({}) was expected to be greater than: {}",this_timeout_value,highest_seen_so_far),DiagnosticSeverity::WARNING);
+                                    },
+                                    Some(_) | // set the highest timeout since we are either the first, or the highest
+                                    None => {
+                                        sub_context_for_this_when_contract.highest_timeout = Some(this_timeout_value)
+                                    }
                                 }
+                                
                             },
-                            None => sub_context.highest_timeout = Some(
-                                time_out.as_str().parse::<i64>().unwrap()
-                            ),
-                        }
+                            Err(_) => todo!(),
+                        } 
                     },
-                    _ => {}
+                    Rule::TimeoutHole => {
+                        // Currently, timeouts only exist in while nodes so this one will always be used
+                        // for detecting these holes. Out matching of timeout holes are not possible unless
+                        // marlowe dsl changes.
+                        write_note(&timeout,"Found a hole of type 'Timeout'.",DiagnosticSeverity::WARNING);
+                    }
+                    _ => {
+                        // currently, we don't need any validation on other timeout types nor their childen..
+                    }
                 }
-                for x in recursively_validate_contract(cases, sub_context.clone()).items {
-                    result.items.push(x)
-                }                
                 
-                for x in recursively_validate_contract(continuation_contract, sub_context.clone()).items {
-                    result.items.push(x)
+
+                // Validate all cases:
+                let case_list_results = recursively_validate_contract(case_list.into_inner(), sub_context_for_this_when_contract.clone()).items;    
+                for item in case_list_results { result.items.push (item) }
+                
+                // Validate the continuation:
+                let continuation_contract_results = recursively_validate_contract(continuation_contract.into_inner(), sub_context_for_this_when_contract.clone()).items;    
+                for item in continuation_contract_results { result.items.push (item) }
+
+            }
+            Rule::ChoiceValue => {
+                let mut choice_value = x.into_inner();
+                // ChoiceValue always contain a single ChoiceId node.
+                // The inner ChoiceId node always has a string value and then a party or a party hole.
+
+                let choice_id_node = choice_value.next().unwrap();
+                let mut choice_id = choice_id_node.clone().into_inner();
+                let choice_id_name = choice_id.next().unwrap();
+                let choice_id_name_value = choice_id_name.as_str().to_string(); // Strings cannot be holes.
+                let party = choice_id.next().unwrap(); // party can be a hole.
+                let who_done_it = party.as_str().to_string();
+
+                // Validate that a choice with that name, and the same party exists.
+                let the_choice = choice_id_name_value.clone() + &who_done_it;
+                if !context.choices.contains(&the_choice) {
+                    write_note(
+                        &choice_id_node,
+                        "The contract uses a ChoiceId that has not been input by a When, so (Constant 0) will be used.",
+                        DiagnosticSeverity::WARNING
+                    );
                 }
-            },
+
+
+
+
+            }
+            Rule::Hole => write_note(&x,"Found a hole",DiagnosticSeverity::WARNING),
+            Rule::PartyHole => write_note(&x,"Found a hole of type 'Party'.",DiagnosticSeverity::WARNING),
+            Rule::FromPartyHole => write_note(&x,"Found a hole of type '(From) Party'.",DiagnosticSeverity::WARNING),
+            Rule::ContractHole => write_note(&x,"Found a hole of type 'Contract'.",DiagnosticSeverity::WARNING),
+            Rule::PayeeHole => write_note(&x,"Found a hole of type 'Party (Payee)'.",DiagnosticSeverity::WARNING),
+            Rule::ValueHole => write_note(&x,"Found a hole of type 'Value'.",DiagnosticSeverity::WARNING),
+            Rule::ObservationHole => write_note(&x,"Found a hole of type 'Observation'.",DiagnosticSeverity::WARNING),
+            Rule::TimeoutHole => write_note(&x,"Found a hole of type 'Timeout'.",DiagnosticSeverity::WARNING),
+            Rule::TokenHole => write_note(&x,"Found a hole of type 'Token'.",DiagnosticSeverity::WARNING),
+            Rule::BoundHole => write_note(&x,"Found a hole of type 'Bound'.",DiagnosticSeverity::WARNING),
+            Rule::RoleHole => write_note(&x,"Found a hole of type 'Role'.",DiagnosticSeverity::WARNING),
+            Rule::PubkeyHole => write_note(&x,"Found a hole of type 'PK'.",DiagnosticSeverity::WARNING),
+            Rule::CaseHole => write_note(&x,"Found a hole of type 'Case'.",DiagnosticSeverity::WARNING),
+            Rule::ActionHole => write_note(&x,"Found a hole of type 'Action'.",DiagnosticSeverity::WARNING),
+            Rule::AccountHole => write_note(&x,"Found a hole of type 'Account'",DiagnosticSeverity::WARNING),
             _ => {
-                for x in recursively_validate_contract(p.into_inner(), context.clone()).items {
-                    result.items.push(x)
-                }
+                let inner_results = recursively_validate_contract(x.into_inner(), context.clone()).items;    
+                for item in inner_results { result.items.push (item) }
             }
         }
+
     }
+
     result
+
 }
 
 
@@ -956,12 +965,13 @@ Impl_LSPARSE_For!(
     marlowe_lang::parsing::Rule,
     marlowe_lang::parsing::MarloweParser,
     marlowe_lang::parsing::Rule::Contract,
-    |x| {
+    |x:pest::iterators::Pairs<'static,marlowe_lang::parsing::Rule>| {
         recursively_validate_contract(x, NodeContext { 
-            defined_roles: vec![], 
+            //defined_roles: vec![], 
             highest_timeout: None , 
-            known_accounts: HashMap::new(),
-            let_assigns : HashMap::new()
+            //known_accounts: HashMap::new(),
+            //let_assigns : HashMap::new(),
+            choices: vec![]
         })
     }
 );

@@ -9,8 +9,11 @@ string = @{ "\"" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-"|"\\\\"|"\\\""
 
 comment = @{ "//" ~ (ASCII_ALPHA | number | ";"|","|"|"|" "|"_"|"-")* ~ NEWLINE}
 
+hole = @{ "?" ~ ("-"|"_"|ASCII_ALPHA|ASCII_DIGIT)* }
+
 expression = { 
-  comment
+  hole
+   | comment
    | "(" ~ ident ~ (expression|number|string|arr)* ~ ")"
    | ident ~ (expression|number|string|arr)*
 }
