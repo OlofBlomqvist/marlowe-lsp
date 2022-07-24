@@ -3,7 +3,7 @@
 	"description": "Marlowe LSP Client",
 	"author": "olof blomqvist <olof@twnet.se>",
 	"license": "MIT",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"publisher": "OlofBlomqvist",
 	"repository": {
 		"type": "git",
