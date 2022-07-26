@@ -1,0 +1,1 @@
+copy-item "Server\target\release\marlowe_lsp.exe" "Clients\VSCode\bin\marlowe_lsp_x86_64-windows.exe"
