@@ -9,6 +9,7 @@ if($null -eq $tag || $tag -eq "") {
 set-location .\Clients\VSCode\bin -ea stop
 
 try {
+    
     $osxurl = "https://github.com/OlofBlomqvist/marlowe_lsp/releases/download/$tag/marlowe_lsp_$($tag)_x86_64-apple-darwin.zip"
     $winurl = "https://github.com/OlofBlomqvist/marlowe_lsp/releases/download/$tag/marlowe_lsp_$($tag)_x86_64-pc-windows-gnu.zip"
     $linurl = "https://github.com/OlofBlomqvist/marlowe_lsp/releases/download/$tag/marlowe_lsp_$($tag)_x86_64-unknown-linux-musl.tar.gz"
@@ -29,9 +30,6 @@ try {
     $osx = Get-ChildItem osx.zip
     $tux = Get-ChildItem lin.tar.gz
 
-    Remove-Item *.bin
-    Remove-Item *.exe
-
     Expand-Archive $win -DestinationPath . -ea stop
     move-item *.exe marlowe_lsp_x86_64-windows.exe -ea stop
     write-host "WIN - EXTRACTED"
@@ -39,7 +37,6 @@ try {
     expand-archive $osx -DestinationPath . -ea stop
     move-item marlowe_lsp marlowe_lsp_x86_64-apple-darwin.bin -ea stop
     write-host "OSX - EXTRACTED"
-
 
     tar xf "$($tux.fullname)"
     move-item marlowe_lsp marlowe_lsp_x86_64-unknown-linux-musl.bin -ea stop

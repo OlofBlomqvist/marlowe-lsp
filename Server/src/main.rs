@@ -718,7 +718,9 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
                                 }
                                 
                             },
-                            Err(_) => todo!(),
+                            Err(e) => {
+                                write_note(&timeout,format!("This does not seem to be a valid number! {e:?}").to_string().as_ref(),DiagnosticSeverity::ERROR);
+                            },
                         } 
                     },
                     Rule::TimeoutHole => {
