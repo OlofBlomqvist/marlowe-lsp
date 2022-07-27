@@ -9,15 +9,15 @@ if($null -eq $tag || $tag -eq "") {
 set-location .\Clients\VSCode\bin -ea stop
 
 try {
-    
+
     $osxurl = "https://github.com/OlofBlomqvist/marlowe_lsp/releases/download/$tag/marlowe_lsp_$($tag)_x86_64-apple-darwin.zip"
     $winurl = "https://github.com/OlofBlomqvist/marlowe_lsp/releases/download/$tag/marlowe_lsp_$($tag)_x86_64-pc-windows-gnu.zip"
     $linurl = "https://github.com/OlofBlomqvist/marlowe_lsp/releases/download/$tag/marlowe_lsp_$($tag)_x86_64-unknown-linux-musl.tar.gz"
 
-    remove-item *.gz
-    remove-item *.zip
-    remove-item *.exe 
-    remove-item *.bin
+    remove-item *.gz -ea stop
+    remove-item *.zip -ea stop
+    remove-item *.exe  -ea stop
+    remove-item *.bin -ea stop
 
     Invoke-WebRequest -uri $osxurl -OutFile osx.zip -ea stop -verbose
     write-host "OSX - DOWNLOADED FROM $osxurl"
