@@ -16,7 +16,7 @@ lsp-types = "0.93.0"
 pest = "*"
 pest_derive = "*"
 schemars = "*"
-marlowe_lang = "0.1.8"
+marlowe_lang = "0.1.9"
 #marlowe_lang = { path = "C:/Users/Olof Blomqvist/Documents/GitHub/marlowe_rust" }
 async-std = "1.10.0"
 futures = "0.3.21"
