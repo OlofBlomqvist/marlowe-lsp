@@ -130,8 +130,8 @@ impl LanguageServer for MyLSPServer {
                         marlowe_lang::parsing::Rule::Case => String::from("A When contract contains a collection of cases. Each case has the form Case action next where action is an Action and next a continuation (another contract). When a particular action happens, the state is updated accordingly and the contract will continue as the corresponding continuation next."),
                         marlowe_lang::parsing::Rule::Bound => String::from("A choice is made for a particular id with a list of bounds on the values that are acceptable. For example, [Bound 0 0, Bound 3 5] offers the choice of one of 0, 3, 4 and 5."),
                         marlowe_lang::parsing::Rule::Party |
-                        marlowe_lang::parsing::Rule::PK |
-                        marlowe_lang::parsing::Rule::Role => String::from("A Party is represented as either a public key hash or a role name. In order to progress a Marlowe contract, a party must provide an evidence. For PK party that would be a valid signature of a transaction signed by a private key of a public key that hashes to party’s PubKeyHash, similarly to Bitcoin’s Pay to Public Key Hash mechanism. For a Role party the evidence is spending a role token within the same transaction, usually to the same owner. So, Role parties will look like (Role \"alice\"), (Role \"bob\") and so on."),
+                        marlowe_lang::parsing::Rule::Address |
+                        marlowe_lang::parsing::Rule::Role => String::from("A Party is represented as either a bench32 encoded address or a role name. In order to progress a Marlowe contract, a party must provide an evidence. For address party that would be a valid signature of a transaction signed by a private key valid for the address, similarly to Bitcoin’s Pay to Public Key Hash mechanism. For a Role party the evidence is spending a role token within the same transaction, usually to the same owner. So, Role parties will look like (Role \"alice\"), (Role \"bob\") and so on."),
                         marlowe_lang::parsing::Rule::ChoiceId => String::from("Choices – of integers – are identified by ChoiceId which combines a name for the choice with the Party who had made the choice"),
                         marlowe_lang::parsing::Rule::TimeIntervalStart |
                         marlowe_lang::parsing::Rule::ConstantParam |
@@ -785,7 +785,6 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
             Rule::TokenHole => write_note(&x,"Found a hole of type 'Token'.",DiagnosticSeverity::WARNING),
             Rule::BoundHole => write_note(&x,"Found a hole of type 'Bound'.",DiagnosticSeverity::WARNING),
             Rule::RoleHole => write_note(&x,"Found a hole of type 'Role'.",DiagnosticSeverity::WARNING),
-            Rule::PubkeyHole => write_note(&x,"Found a hole of type 'PK'.",DiagnosticSeverity::WARNING),
             Rule::CaseHole => write_note(&x,"Found a hole of type 'Case'.",DiagnosticSeverity::WARNING),
             Rule::ActionHole => write_note(&x,"Found a hole of type 'Action'.",DiagnosticSeverity::WARNING),
             Rule::AccountHole => write_note(&x,"Found a hole of type 'Account'",DiagnosticSeverity::WARNING),
