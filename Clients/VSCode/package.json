@@ -3,7 +3,7 @@
 	"description": "Marlowe LSP Client",
 	"author": "olof blomqvist <olof@twnet.se>",
 	"license": "MIT",
-	"version": "0.0.12",
+	"version": "0.0.13",
 	"publisher": "OlofBlomqvist",
 	"repository": {
 		"type": "git",
@@ -14,17 +14,25 @@
 	},
 	"main": "./build/client/extension",
 	"activationEvents": [
-		"onLanguage:Marlowe"
+		"onLanguage:Marlowe",
+		"onLanguage:marlowe"
 	],
 	"contributes": {
 		"languages": [
 			{
 				"extensions": [
 					".marlowe"
-				],
-				"id": "Marlowe"
+				],"aliases": [],
+				"id": "Marlowe", "configuration": "./language-configuration.json"
 			}
 		],
+		"grammars": [
+			{
+			  "language": "Marlowe",
+			  "path": "./marlowe_lang.json", 
+			  "scopeName": "source.marlowe"
+			}
+		  ],
 		"configuration": {
 			"type": "object",
 			"title": "Test",

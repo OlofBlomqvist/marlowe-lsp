@@ -75,6 +75,7 @@ impl LanguageServer for MyLSPServer {
                     file_operations: None,
                 }),
                 document_highlight_provider: Some(OneOf::Left(true)),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
                         SemanticTokensRegistrationOptions { 
@@ -207,6 +208,27 @@ impl LanguageServer for MyLSPServer {
         }
     }
 
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let mut state = self.state.lock().unwrap();
+        let id = *state.sources.get(&params.text_document.uri).unwrap();
+        let mut source = state.files.source(id).to_owned();
+        let new_text = marlowe_lang::parsing::fmt::fmt(&source);//.replace("\n","z");
+        Ok(Some(vec![
+        TextEdit {
+            range: lsp_types::Range {
+                start: lsp_types::Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: lsp_types::Position {
+                    line: u32::MAX,
+                    character: 0,
+                },
+            },
+            new_text,
+        }
+       ]))
+    }
 
     async fn document_highlight(
         &self,
@@ -833,11 +855,8 @@ macro_rules! Impl_LSPARSE_For {
                 ) {
                     Ok(p) => { 
                         
-                        let mut previous_range : Option<lsp_types::Range> = None;
                         let mut last_line_start : usize = 1;
-                        let mut last_line_end: usize = 1;
                         let mut last_start: usize = 1;
-                        let mut last_end: usize = 1;
                         
                         let data = 
                             p.clone().flatten().map(|x|{
@@ -876,9 +895,7 @@ macro_rules! Impl_LSPARSE_For {
                                     token_modifiers_bitset: 0 
                                 };
         
-                                (last_line_end,last_end) = (end_line,end_col);
                                 (last_line_start,last_start) = (start_line,start_col);
-                                previous_range = Some(range);
                                 (range,x.as_rule(),token)
                             }).collect();
 

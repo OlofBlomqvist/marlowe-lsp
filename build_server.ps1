@@ -2,7 +2,7 @@
 param()
 
 Write-Output "Preparing for build"
-Remove-Item .\Server\target\release -Recurse -verbose:$VerbosePreference  -ErrorAction SilentlyContinue
+#Remove-Item .\Server\target\release -Recurse -verbose:$VerbosePreference  -ErrorAction SilentlyContinue
 Set-Location .\Server -verbose:$VerbosePreference -ErrorAction Stop
 Write-Output "Building server"
 
