@@ -1,6 +1,6 @@
 ## MarloweLSP
 
-An experimental LSP for Cardano Marlowe using [marlowe_rust](https://github.com/OlofBlomqvist/marlowe_rust).
+An experimental LSP for Cardano Marlowe using [marlowe-rs](https://github.com/OlofBlomqvist/marlowe_rust).
 
 For the VSCode extension, go [here](https://marketplace.visualstudio.com/items?itemName=OlofBlomqvist.marlowelsp).
 
