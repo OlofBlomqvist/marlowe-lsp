@@ -3,24 +3,35 @@ name = "marlowe_lsp"
 version = "0.1.1"
 edition = "2021"
 
+[lib]
+name = "marlowe_lsp_lib"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "marlowe_lsp"
+path = "src/bin.rs"
+document-private-items = false
+
+
 
 [dependencies]
-decurse = "0.0.4"
 codespan = "*"
 codespan-reporting = "*"
 serde = "*"
-serde_json = "*"
-tokio-util = { version = "0.7",  features = ["codec"] }
-tokio = { version = "1.17", features = ["full"]}
+serde_json = {version="1.0.103"}
 lsp-types = "0.93.0" 
-pest = "*"
-pest_derive = "*"
-schemars = "*"
-marlowe_lang = "0.1.16"
-#marlowe_lang = { path = "C:/Users/Olof Blomqvist/Documents/GitHub/marlowe_rust" }
-async-std = "1.10.0"
-futures = "0.3.21"
-tower-lsp = "0.17"
+marlowe_lang = { version="0.2.0", features=[ "unstable", "utils" ,"js"]  }
 regex = "1.5.6"
 line-col = "0.2.1"
-quote = "1.0.21"
+anyhow = "*"
+wasm-bindgen = { version="0.2.87" }
+js-sys = { version = "0.3.64" }
+web-sys = { version = "0.3.64", features=["console","DedicatedWorkerGlobalScope","MessageEvent"]  }
+wasm-bindgen-futures = {version= "0.4.37" } 
+console_error_panic_hook = {version="0.1.7" }
+gloo-utils = "0.1.7"
+serde-wasm-bindgen = "0.5.0"
+pest = "2.7.1"
+pest_derive = "2.7.1"
+decurse = "0.0.4"
