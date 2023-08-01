@@ -1,0 +1,94 @@
+{
+    "name": "Marlowe Light",
+    "type": "light",
+    "colors": {
+        "editor.background": "#FFFFFF",
+        "editor.foreground": "#000000"
+    },
+    "tokenColors": [
+        {
+            "scope": "keyword.action.marlowe",
+            "settings": {
+                "foreground": "#458800"
+            }
+        },
+        {
+            "scope": "keyword.value.marlowe",
+            "settings": {
+                "foreground": "#1F6199"
+            }
+        },
+        {
+            "scope": "keyword.observation.marlowe",
+            "settings": {
+                "foreground": "#881398"
+            }
+        },
+        {
+            "scope": "keyword.bound.marlowe",
+            "settings": {
+                "foreground": "#0E8147"
+            }
+        },
+        {
+            "scope": "keyword.payee.marlowe",
+            "settings": {
+                "foreground": "#AF00DB"
+            }
+        },
+        {
+            "scope": "keyword.party.marlowe",
+            "settings": {
+                "foreground": "#0088AA"
+            }
+        },
+        {
+            "scope": "keyword.case.marlowe",
+            "settings": {
+                "foreground": "#6666FF"
+            }
+        },
+        {
+            "scope": "keyword.contract.marlowe",
+            "settings": {
+                "foreground": "#AF00DB"
+            }
+        },
+        {
+            "scope": "constant.numeric.marlowe",
+            "settings": {
+                "foreground": "#2545E4"
+            }
+        },
+        {
+            "scope": "keyword.operator.marlowe",
+            "settings": {
+                "foreground": "#000000"
+            }
+        },
+        {
+            "scope": "punctuation.marlowe",
+            "settings": {
+                "foreground": "#000000"
+            }
+        },
+        {
+            "scope": "string.quoted.double.marlowe",
+            "settings": {
+                "foreground": "#BB0000"
+            }
+        },
+        {
+            "scope": "comment.line.marlowe, comment.block.marlowe",
+            "settings": {
+                "foreground": "#008000"
+            }
+        },
+        {
+            "scope": "keyword.other.marlowe",
+            "settings": {
+                "foreground": "#224499"
+            }
+        }
+    ]
+}

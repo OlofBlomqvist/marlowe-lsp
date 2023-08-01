@@ -1,0 +1,159 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Marlowe",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#actionKeywords"
+    },
+    {
+      "include": "#otherKeywords"
+    },
+    {
+      "include": "#valueKeywords"
+    },
+    {
+      "include": "#observationKeywords"
+    },
+    {
+      "include": "#boundKeywords"
+    },
+    {
+      "include": "#payeeKeywords"
+    },
+    {
+      "include": "#partyKeywords"
+    },
+    {
+      "include": "#caseKeywords"
+    },
+    {
+      "include": "#contractKeywords"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    },
+    {
+      "include": "#strings"
+    }
+  ],
+  "repository": {
+     "otherKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.marlowe",
+          "match": "\\b(ConstantParam|ChoiceId|TimeParam|Token)\\b"
+        }
+      ]
+    },
+    "actionKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.action.marlowe",
+          "match": "\\b(Deposit|Choice|Notify)\\b"
+        }
+      ]
+    },
+    "valueKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.value.marlowe",
+          "match": "\\b(AvailableMoney|Constant|NegValue|AddValue|SubValue|MulValue|DivValue|ChoiceValue|TimeIntervalStart|TimeIntervalEnd|UseValue|Cond)\\b"
+        }
+      ]
+    },
+    "observationKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.observation.marlowe",
+          "match": "\\b(AndObs|OrObs|NotObs|ChoseSomething|ValueGE|ValueGT|ValueLT|ValueLE|ValueEQ|TrueObs|FalseObs)\\b"
+        }
+      ]
+    },
+    "boundKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.bound.marlowe",
+          "match": "\\bBound\\b"
+        }
+      ]
+    },
+    "payeeKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.payee.marlowe",
+          "match": "\\b(Account|Party)\\b"
+        }
+      ]
+    },
+    "partyKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.party.marlowe",
+          "match": "\\b(Role|Address)\\b"
+        }
+      ]
+    },
+    "caseKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.case.marlowe",
+          "match": "\\b(Case|MerkleizedCase)\\b"
+        }
+      ]
+    },
+    "contractKeywords": {
+      "patterns": [
+        {
+          "name": "keyword.contract.marlowe",
+          "match": "\\b(Close|Pay|If|When|Let|Assert)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.marlowe",
+      "match": "\\b\\d+\\b"
+    },
+    "operators": {
+      "name": "keyword.operator.marlowe",
+      "match": "[=><]+"
+    },
+    "punctuation": {
+      "name": "punctuation.marlowe",
+      "match": "[{}\\[\\];(),.:]"
+    },
+    "strings": {
+      "name": "string.quoted.double.marlowe",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.marlowe",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.marlowe",
+          "match": "//.*"
+        },
+        {
+          "name": "comment.block.marlowe",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.marlowe"
+}

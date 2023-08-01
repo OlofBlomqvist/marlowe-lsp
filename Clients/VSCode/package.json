@@ -3,7 +3,7 @@
 	"displayName": "Marlowe DSL",
 	"description": "Syntax highlighting for Cardano Marlowe DSL",
 	"author": "olof@twnet.se",
-	"version": "0.0.15",
+	"version": "0.0.16",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/olofblomqvist/marlowe-lsp"
@@ -32,6 +32,26 @@
 				]
 			}
 		],
+		"grammars": [
+			{
+				"language": "marlowe",
+				"scopeName": "source.marlowe",
+				"path": "./marlowe.tmLanguage.json"
+			}
+		],
+		"themes": [
+			{
+			  "label": "marlowe-dark",
+			  "uiTheme": "vs-dark",
+			  "path": "./marlowe-dark-theme.json"
+			},
+			{
+				"label": "marlowe-light",
+				"uiTheme": "vs",
+				"path": "./marlowe-light-theme.json"
+			  }
+		  ]
+		,
 		"configuration": [
 			{
 				"order": 22,

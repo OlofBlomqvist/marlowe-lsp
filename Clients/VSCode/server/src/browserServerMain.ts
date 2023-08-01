@@ -1,7 +1,7 @@
 import init, * as m from 'marlowe_lsp';
 
 async function initialize(s:string) {
-  await init(s+"/dist/3e01cd3d41263a324488.wasm");
+  await init(s+"/dist/73e13ae83624f1e0b8de.wasm");
   m.set_panic_hook();
   m.mainly();
 }
