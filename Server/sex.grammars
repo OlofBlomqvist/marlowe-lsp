@@ -16,6 +16,7 @@ expression = {
    | comment
    | "(" ~ ident ~ (expression|number|string|arr)* ~ ")"
    | ident ~ (expression|number|string|arr)*
+   | ASCII_ALPHA
 }
 
 arr = { 

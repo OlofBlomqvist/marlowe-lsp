@@ -1,8 +1,9 @@
 {
 	"name": "marlowelsp",
-	"description": "LSP For Cardano Marlowe DSL",
+	"displayName": "Marlowe DSL",
+	"description": "Syntax highlighting for Cardano Marlowe DSL",
 	"author": "olof@twnet.se",
-	"version": "0.0.14",
+	"version": "0.0.15",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/olofblomqvist/marlowe-lsp"
@@ -10,7 +11,7 @@
 	"publisher": "olofblomqvist",
 	"categories": [],
 	"keywords": [
-		"marlowe wasm"
+		"Marlowe","Cardano","DSL","LSP"
 	],
 	"engines": {
 		"vscode": "^1.43.0"

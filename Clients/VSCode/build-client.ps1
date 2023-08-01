@@ -8,4 +8,4 @@ if($x -imatch $hash_of_server) {
 	Write-Error -ea stop -Message "did you update the hash? expected $($hash_of_server)"
 }
 
-vsce.cmd package
+vsce.cmd package	

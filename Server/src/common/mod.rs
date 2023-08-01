@@ -627,11 +627,6 @@ fn update_asts(source:String,state:&mut State,url:Url)  {
 
 
 
-
-
-// FROM OLD =================
-
-
 fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
     
     match &state.sexpression_parser_error {
@@ -686,7 +681,26 @@ fn get_diagnostics(state:&mut State,url:&Url) -> Vec<Diagnostic> {
                 }   
             ).collect()
         }
-        None => vec![]
+        None => {
+            match state.sexpression_asts.get(url) {
+                Some(x) => {
+                    x.1.items.iter().map(|d|               
+                        Diagnostic { 
+                            range: d.0, 
+                            severity: Some(d.3), 
+                            code: Some(NumberOrString::String("DIAGNOSTIC".to_string())), 
+                            code_description: None, 
+                            source: None, 
+                            message: d.2.to_owned(),
+                            related_information: None, 
+                            tags: None, 
+                            data: None 
+                        }   
+                    ).collect()
+                }
+                None => vec![]
+            }
+        }
     }
    
     
