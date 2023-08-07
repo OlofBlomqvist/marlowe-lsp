@@ -403,7 +403,7 @@ impl  MarloweLSPServer {
 
         
         let token_snippets = Self::suggest_this(closest,"?token",vec![
-            ("Token",r#"Token "${1:symbol}" "${2:name""#),
+            ("Token",r#"(Token "${1:symbol}" "${2:name}")"#),
             ("ADA",r#"(Token "" "")"#)
         ]);
 
@@ -660,6 +660,7 @@ impl  MarloweLSPServer {
                 for x in party_snippets(false) { items.push(x.clone()) };
                 for x in payee_snippets(false) { items.push(x.clone()) };
                 for x in value_snippets(false) { items.push(x.clone()) };
+                for x in token_snippets(false) { items.push(x.clone()) };                
                 for x in observation_snippets(false) { items.push(x.clone()) };    
                 items.push(CompletionItem {
                     label: "Case".into(),
