@@ -3,6 +3,7 @@ use codespan::FileId;
 use codespan_reporting::files::Error;
 use marlowe_lang::{parsing::Rule};
 use regex::{Regex};
+use serde::de::value;
 use std::{collections::{HashMap, VecDeque}, sync::Mutex, hash::Hash};
 use serde_json::{Value, json};
 use line_col::LineColLookup;
@@ -68,25 +69,34 @@ impl  MarloweLSPServer {
                 }),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
-                semantic_tokens_provider: Some(
+                semantic_tokens_provider: 
+                Some(
                     SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
                         SemanticTokensRegistrationOptions { 
-                            text_document_registration_options: TextDocumentRegistrationOptions{ 
+                            text_document_registration_options: TextDocumentRegistrationOptions { 
                                 document_selector: None
                             }, 
                             semantic_tokens_options: SemanticTokensOptions{ 
                                 work_done_progress_options: WorkDoneProgressOptions{ 
-                                    work_done_progress: Some(false)
-                                 },
+                                    work_done_progress: Some(false) 
+                                },
                                 legend: SemanticTokensLegend { 
                                     token_types: vec![
-                                        SemanticTokenType::VARIABLE,
                                         SemanticTokenType::STRING,
-                                        SemanticTokenType::NUMBER ,
-                                        SemanticTokenType::STRUCT
+                                        SemanticTokenType::NUMBER,
+                                        SemanticTokenType::new("keyword.other.marlowe"), // OTHER
+                                        SemanticTokenType::ENUM, // ACTION
+                                        SemanticTokenType::FUNCTION, // VALUE
+                                        SemanticTokenType::METHOD, // OBS
+                                        SemanticTokenType::NAMESPACE, // BOUND
+                                        SemanticTokenType::STRUCT, // PAYEE
+                                        SemanticTokenType::STRUCT, // PARTY
+                                        SemanticTokenType::STRUCT, // CASE
+                                        SemanticTokenType::new("keyword.control.contract.marlowe"), // CONTRACT            
+
                                     ], 
                                     token_modifiers: vec![
-                                        SemanticTokenModifier::STATIC
+                                                                            
                                     ]
                                 }, 
                                 range: Some(false), 
@@ -97,10 +107,8 @@ impl  MarloweLSPServer {
                     )
                 ),
                 hover_provider: Some(HoverProviderCapability::Simple(true)), 
-                
                 ..Default::default()
-            },
-            ..Default::default()
+            }
         })
     }
     
@@ -177,8 +185,6 @@ impl  MarloweLSPServer {
         &mut self,
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
-          
-
         match self.state.sexpression_asts.get(&params.text_document.uri) {
             Some(token_list) => {
                 Ok(Some(SemanticTokensResult::Tokens(SemanticTokens{
@@ -314,8 +320,47 @@ impl  MarloweLSPServer {
         self.state.outgoing_log_messages.push_back((MessageType::INFO,"a document was closed".into()));
     }
 
+    fn suggest_this(closest: Option<(Range, Rule, SemanticToken)>, hole_strx: &str, snippets: Vec<(&str, &str)>) -> Box<dyn Fn(bool) -> Vec<CompletionItem>> {
+        let hole_str = hole_strx.to_string();
+        let closest = closest.clone();
+        let snippets: Vec<(String, String)> = snippets.iter()
+            .map(|(label, text)| (label.to_string(), text.to_string()))
+            .collect();
+        Box::new(move |hole: bool| {
+            let mut autocomplete: Vec<CompletionItem> = if hole {
+                vec![]
+            } else {
+                snippets.clone().into_iter().map(|(label, _)| CompletionItem {
+                    label: label.to_string(),
+                    kind: Some(CompletionItemKind::TEXT),
+                    insert_text: Some(label.to_string()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                }).collect()
+            };
+    
+            let snippet_items = snippets.clone().into_iter().map(|(label, text)| CompletionItem {
+                label: format!("[snippet] {}", label),
+                kind: Some(CompletionItemKind::SNIPPET),
+                filter_text: if hole { Some(hole_str.to_string()) } else { None },
+                insert_text: if closest.clone().is_none() { Some(text.to_string()) } else { None },
+                text_edit: closest.clone().as_ref().map(|(range, _, _)| CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                    insert: range.clone(),
+                    new_text: text.to_string(),
+                    replace: range.clone(),
+                })),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            });
+    
+            autocomplete.extend(snippet_items);
+            autocomplete
+        })
+    }
+    
+
     pub fn completion(&mut self, completion_params: CompletionParams) -> Result<Option<CompletionResponse>> {
-               // If we ever want to do anything more than basic Role name suggestions in here,
+        // If we ever want to do anything more than basic Role name suggestions in here,
         // this code should be thrown out and replaced completely.
 
         let (source,col) = {
@@ -326,42 +371,330 @@ impl  MarloweLSPServer {
             (src,bindex)
         };
 
-        if col < 10 { return Ok(None) }
+        let toks = {
+            match self.state.marlowe_asts.get_mut(&completion_params.text_document_position.text_document.uri) {
+                None => vec![],
+                Some(semantic_tokens) => semantic_tokens.0.clone()
+            }
+            
+        };
 
-        match source.get(col - 6 .. col) {
-            None => return Ok(None),
-            Some(prior) => 
-                if prior != "Role \"" {
-                    return Ok(None)
+        // if currently on a ?timeout
+        let closest = 
+            marlowe_lang::parsing::Rule::get_token_at_position(
+                toks.to_vec(),completion_params.text_document_position.position
+            );
+
+
+            
+
+        // let previous_token = 
+        //     marlowe_lang::parsing::Rule::get_previous_token_of_position(
+        //         toks.to_vec(),completion_params.text_document_position.position
+        //     );
+
+        // let next_token = 
+        //     marlowe_lang::parsing::Rule::get_next_token_after_position(
+        //         toks.to_vec(),completion_params.text_document_position.position
+        //     );
+
+        self.state.outgoing_log_messages.push_back((lsp_types::MessageType::WARNING,format!("oh my we see this is the closest item : {:?}..",closest)));
+
+
+        
+        let token_snippets = Self::suggest_this(closest,"?token",vec![
+            ("Token",r#"Token "${1:symbol}" "${2:name""#),
+            ("ADA",r#"(Token "" "")"#)
+        ]);
+
+        let payee_snippets = Self::suggest_this(closest,"?payee",vec![
+            ("Party",r#"(Party ${1:?party}) "#),
+            ("Account",r#"(Account ${1:?party}) "#)
+        ]);
+
+        let party_snippets = Self::suggest_this(closest,"?party",vec![
+            ("Role",r#"(Role "${1:token}")"#),
+            ("Address",r#"(Address "${1:bech32_address}")"#)
+        ]);
+
+        let value_snippets = Self::suggest_this(closest,"?value",vec![
+            ("AddValue",r#"(AddValue ${1:?value} ${2:?value})"#),
+            ("AvailableMoney",r#"(AvailableMoney ${1:?party} ${2:?token})"#),
+            ("ChoiceValue",r#"(ChoiceValue (ChoiceId "${1:choiceNumber}" ${2:?party}))"#),
+            ("Cond",r#"(Cond ?observation ${1:?value} ${2:?value})"#),
+            ("Constant",r#"(Constant ${1:0})"#),
+            ("ConstantParam",r#"(ConstantParam "${1:parameterName}")"#),
+            ("DivValue",r#"(DivValue ${1:?value} ${2:?value})"#),
+            ("MulValue",r#"(MulValue ${1:?value} ${2:?value})"#),
+            ("NegValue",r#"(NegValue ${1:?value})"#),
+            ("SubValue",r#"(SubValue ${1:?value} ${2:?value})"#),
+            ("TimeIntervalEnd",r#"TimeIntervalEnd"#),
+            ("TimeIntervalStart",r#"TimeIntervalStart"#),
+            ("UseValue",r#"(UseValue "${1:valueId}")"#),
+        ]);
+
+        let observation_snippets = Self::suggest_this(closest,"?observation",vec![
+            ("AndObs",r#"(AndObs ${1:?observation} ${2:?observation})"#),
+            ("ChoseSomething",r#"(ChoseSomething (ChoiceId "${1:choiceNumber}" ${2:?party}))"#),
+            ("FalseObs",r#"FalseObs"#),
+            ("TrueObs",r#"TrueObs"#),
+            ("NotObs",r#"(NotObs ${1:?observation})"#),
+            ("OrObs",r#"(OrObs ${1:?observation} ${2:?observation})"#),
+            ("ValueEQ",r#"(ValueEQ ${1:?value} ${2:?value})"#),
+            ("ValueGE",r#"(ValueGE ${1:?value} ${2:?value})"#),
+            ("ValueGT",r#"(ValueGT ${1:?value} ${2:?value})"#),
+            ("ValueLE",r#"(ValueLE ${1:?value} ${2:?value})"#),
+            ("ValueLT",r#"(ValueLT ${1:?value} ${2:?value})"#),
+        ]);
+
+        let action_snippets = Self::suggest_this(closest,"?action",vec![
+            ("Choice",r#"(Choice (ChoiceId "${1:choiceNumber}" ${2:?party}) [ ${3:?bounds} ])"#),
+            ("Deposit",r#"(Deposit ${1:?party} ${2:?from_party} ${3:?token} ${4:?value})"#),
+            ("Notify",r#"(Notify ${1:?observation})"#)
+        ]);
+
+        let initial_contract_snippets = 
+            vec![
+                    ("Assert",r#"Assert ${1:?observation} ${2:?contract}"#),
+                    ("Pay",r#"Pay ${1:?party} ${2:?payee} ${3:?token} ${4:?value} ${5:?contract}"#),
+                    ("Let",r#"Let "${1:valueId}" ${2:?value} ${3:?contract}"#),
+                    ("When",r#"When [] ${1:?timeout} ${2:?contract}"#),
+                    ("If",r#"If ${1:?observation} ${2:?contract} ${3:?contract}"#),
+                    ("Close",r#"Close"#),
+                ].into_iter().map(|(label,text)|  CompletionItem {
+                    label: label.to_string(),
+                    kind: Some(CompletionItemKind::SNIPPET),
+                    insert_text: Some(text.to_string()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
                 }
+            );
+
+        if source.trim().len() < 8{
+            return Ok(Some(lsp_types::CompletionResponse::List(
+                CompletionList { 
+                    is_incomplete: false, 
+                    items: initial_contract_snippets.collect()
+                }
+            )));
         }
 
-        let mut matches : Vec<CompletionItem> = 
-            Regex::new("Role \".*\"")
-                .unwrap()
-                .find_iter(&source).map(|x|{
-                    let s = x.as_str();
-                    CompletionItem {
-                        label: if let Some(xx) = s.get(6..s.len()-1) { xx.to_string() } else { s.to_string() }, 
-                        kind: None, detail: None, 
-                        documentation: None, deprecated: None, preselect: None, sort_text: None, 
-                        filter_text: None, insert_text: None, insert_text_format: None, 
-                        insert_text_mode: None, text_edit: None, additional_text_edits: None, 
-                        command: None, commit_characters: None, data: None, tags: None }
-                }
-                ).collect();
-        
-        if matches.is_empty() {return Ok(None)}
-        matches.sort_by_key(|x|x.label.clone());
-        matches.dedup_by_key(|x|x.label.clone());
-        Ok(Some(
+
+        fn respond_with_items(x:Vec<CompletionItem>) -> CompletionResponse {
             lsp_types::CompletionResponse::List(
                 CompletionList { 
                     is_incomplete: false, 
-                    items: matches
+                    items: x
                 }
             )
-        ))
+        }
+        
+        let contract_snippets = Self::suggest_this(closest,"?contract",vec![
+            ("Close",r#"Close"#),
+            ("Assert",r#"(Assert ${1:?observation} ${2:?contract})"#),
+            ("Pay",r#"(Pay ${1:?party} ${2:?payee} ${3:?token} ${4:?value} ${5:?contract})"#),
+            ("Let",r#"(Let "${1:valueId}" ${2:?value} ${3:?contract})"#),
+            ("When",r#"(When [] ${1:?timeout} ${2:?contract})"#),
+            ("If",r#"(If ${1:?observation} ${2:?contract} ${3:?contract})"#)
+        ]);
+
+        match closest {
+            Some((range,rule,semtok)) if rule == Rule::ContractHole => 
+                Ok(Some(respond_with_items(contract_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::ObservationHole => 
+                Ok(Some(respond_with_items(observation_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::TokenHole => 
+                Ok(Some(respond_with_items(token_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::PayeeHole => 
+                Ok(Some(respond_with_items(payee_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::PartyHole || rule == Rule::FromPartyHole  => 
+                Ok(Some(respond_with_items(party_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::ValueHole => 
+                Ok(Some(respond_with_items(value_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::ActionHole =>
+                Ok(Some(respond_with_items(action_snippets(true)))),
+
+            Some((range,rule,semtok)) if rule == Rule::TimeoutHole => {
+                Ok(Some(
+                    lsp_types::CompletionResponse::List(
+                        CompletionList { 
+                            is_incomplete: false, 
+                            items: vec![              
+                                CompletionItem {
+                                    label: "TimeParam".into(),
+                                    kind: Some(CompletionItemKind::SNIPPET),
+                                    detail: Some("Details".into()),
+                                    documentation: Some(Documentation::String("Very fancy documentation".into())),
+                                    filter_text: Some("?timeout".into()),
+                                    // insert_text: Some(r#"(TimeParam "${1:parameter_name}")"#.into()) 
+                                    text_edit: if let Some(((range,rule,semtok))) = &closest { 
+                                        Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                                            insert: range.clone(),
+                                            new_text: r#"(TimeParam "${1:parameter_name}")"#.into(),
+                                            replace: range.clone(),
+                                        }))
+                                    } else {None},
+                                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                                    preselect: Some(true),
+                                    ..Default::default()
+                                },
+                                CompletionItem {
+                                    label: "Timeout".into(),
+                                    kind: Some(CompletionItemKind::SNIPPET),
+                                    detail: Some("Details".into()),
+                                    documentation: Some(Documentation::String("Very fancy documentation".into())),
+                                    filter_text: Some("?timeout".into()),
+                                    // insert_text: Some(r#"(TimeParam "${1:parameter_name}")"#.into()) 
+                                    text_edit: if let Some(((range,rule,semtok))) = &closest { 
+                                        Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+                                            insert: range.clone(),
+                                            new_text: r#"55555555555"#.into(),
+                                            replace: range.clone(),
+                                        }))
+                                    } else {None},
+                                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                                    preselect: Some(true),
+                                    ..Default::default()
+                                }
+                            ]
+                        }
+                    )
+                ))
+            },
+            Some((range,rule,semtok)) 
+                if rule == Rule::ArrayOfCases || rule == Rule::CaseHole || rule == Rule::Case => {
+                Ok(Some(
+                    lsp_types::CompletionResponse::List(
+                        CompletionList { 
+                            is_incomplete: false, 
+                            items: vec![
+                                CompletionItem {
+                                    label: "Case".into(),
+                                    kind: Some(CompletionItemKind::SNIPPET),
+                                    insert_text: Some("(Case ${1:?action} ${2:?contract})".into()),
+                                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                                    ..Default::default()
+                                }
+                            ]
+                        }
+                    )
+                ))
+            },
+            
+            _ => {
+
+                if col > 10 {
+                    match source.get(col - 9 .. col) {
+                        None => {},
+                        Some(prior) => {
+                            // Support for autocompleting addresses based on previously seen ones
+                            if prior == "Address \"" {
+                                let mut matches : Vec<CompletionItem> = 
+                                Regex::new("Address \".*\"")
+                                    .unwrap()
+                                    .find_iter(&source).map(|x|{
+                                        let s = x.as_str();
+                                        CompletionItem {
+                                            label: if let Some(xx) = s.get(9..s.len()-1) { xx.to_string() } else { s.to_string() }, 
+                                            ..Default::default() }
+                                    }
+                                    ).collect();
+                            
+                                if !matches.is_empty() {
+                                    matches.sort_by_key(|x|x.label.clone());
+                                    matches.dedup_by_key(|x|x.label.clone());
+                                    return Ok(Some(
+                                        lsp_types::CompletionResponse::List(
+                                            CompletionList { 
+                                                is_incomplete: false, 
+                                                items: matches
+                                            }
+                                        )
+                                    ))
+                                }       
+                            }
+                            
+                        }
+                    }
+                    match source.get(col - 6 .. col) {
+                        None => {},
+                        Some(prior) => {
+                            // Support for autocompleting roles based on previously seen ones
+                            if prior == "Role \"" {
+                                let mut matches : Vec<CompletionItem> = 
+                                Regex::new("Role \".*\"")
+                                    .unwrap()
+                                    .find_iter(&source).map(|x|{
+                                        let s = x.as_str();
+                                        CompletionItem {
+                                            label: if let Some(xx) = s.get(6..s.len()-1) { xx.to_string() } else { s.to_string() }, 
+                                            ..Default::default() }
+                                    }
+                                    ).collect();
+                            
+                                if !matches.is_empty() {
+                                    matches.sort_by_key(|x|x.label.clone());
+                                    matches.dedup_by_key(|x|x.label.clone());
+                                    return Ok(Some(
+                                        lsp_types::CompletionResponse::List(
+                                            CompletionList { 
+                                                is_incomplete: false, 
+                                                items: matches
+                                            }
+                                        )
+                                    ))
+                                }       
+                            }
+                        }
+                    }
+                }
+                let mut items = vec![];
+                for x in action_snippets(false) { items.push(x.clone()) };
+                for x in contract_snippets(false) { items.push(x.clone()) };
+                for x in party_snippets(false) { items.push(x.clone()) };
+                for x in payee_snippets(false) { items.push(x.clone()) };
+                for x in value_snippets(false) { items.push(x.clone()) };
+                for x in observation_snippets(false) { items.push(x.clone()) };    
+                items.push(CompletionItem {
+                    label: "Case".into(),
+                    kind: Some(CompletionItemKind::TEXT),
+                    insert_text: Some("(Case ${1:?action} ${2:?contract})".into()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                });
+                items.push(CompletionItem {
+                    label: "TimeParam".into(),
+                    kind: Some(CompletionItemKind::TEXT),
+                    insert_text: Some(r#"(TimeParam "${1:variable_name}")"#.into()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                });
+                items.push(CompletionItem {
+                    label: "Timeout".into(),
+                    kind: Some(CompletionItemKind::TEXT),
+                    insert_text: Some(r#"55555555555555"#.into()),
+                    insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                    ..Default::default()
+                });
+                Ok(Some(
+                    lsp_types::CompletionResponse::List(
+                        CompletionList { 
+                            is_incomplete: false, 
+                            items: items
+                        }
+                    )
+                ))
+            }
+        }
+        
+
+
     }
     
 
@@ -541,28 +874,90 @@ fn update_document(
 
 // uses marlowe token rule in combination with s expression to create final verdict 
 // on which semantictoken type to use for a specific range
-fn get_token_id(mar_vec:Vec<(Range, marlowe_lang::parsing::Rule, SemanticToken)>) -> impl Fn(sex::Rule,Range) -> u32 {
-    move |rule:sex::Rule,range:Range| {
-        let marlowe_match = 
-            mar_vec.iter().find(|x|x.0==range);
-        let default_func = |rule| match rule {
-            sex::Rule::string => 1,
-            sex::Rule::number => 2,
-            sex::Rule::ident => 0,
+fn get_token_id(mar_vec:Vec<(Range, marlowe_lang::parsing::Rule, SemanticToken)>) -> impl Fn(String,sex::Rule,Range) -> u32 {
+
+    // legend: SemanticTokensLegend { 
+    //     token_types: vec![
+    //         SemanticTokenType::VARIABLE, 0
+    //         SemanticTokenType::STRING, 1
+    //         SemanticTokenType::NUMBER , 2
+    //         SemanticTokenType::STRUCT, 3
+    //         SemanticTokenType::KEYWORD, 4
+    //         SemanticTokenType::ENUM, 5
+    //         SemanticTokenType::ENUM_MEMBER , 5                                    
+    //         SemanticTokenType::FUNCTION 6
+    //     ], 
+    //     token_modifiers: vec![
+    //         SemanticTokenModifier::STATIC                                        
+    //     ]
+    // }, 
+
+
+    move |span_content: String, rule: sex::Rule, range: Range| {
+
+        // STRING --> 0
+        // number --> 1
+        // OTHER --> 2
+        // Action --> 3
+        // Value --> 4
+        // Observation --> 5
+        // Bound --> 6
+        // Payee --> 7
+        // Party --> 8
+        // Case --> 9
+        // Contract --> 10
+        
+        
+        // NOTE: TOKEN TYPES
+        match rule {
+            sex::Rule::string => 0,
+            sex::Rule::number => 1,
+            sex::Rule::ident => {
+                match span_content.as_str() {
+                    // Other Keywords
+                    "ConstantParam" | "ChoiceId" | "TimeParam" | "Token" => 2,
+                    
+                    // Action Keywords
+                    //"Deposit" | "Choice" | "Notify" => 3,
+
+                    // Value Keywords
+                    "AvailableMoney" | "Constant" | "NegValue" | "AddValue" | "SubValue" 
+                    | "MulValue" | "DivValue" | "ChoiceValue" | "TimeIntervalStart" 
+                    | "TimeIntervalEnd" | "UseValue" | "Cond" => 4,
+
+                    // Observation Keywords
+                    "AndObs" | "OrObs" | "NotObs" | "ChoseSomething" | "ValueGE" 
+                    | "ValueGT" | "ValueLT" | "ValueLE" | "ValueEQ" | "TrueObs" | "FalseObs" => 5,
+
+                    // Bound Keywords
+                    "Bound" => 6,
+
+                    // Payee Keywords
+                    "Account" | "Party" => 7,
+
+                    // Party Keywords
+                    "Role" | "Address" => 8,
+
+                    // Case Keywords
+                    "Case" | "MerkleizedCase" => 9,
+
+                    // Contract Keywords
+                    "Close" | "Pay" | "If" | "When" | "Let" | "Assert" => 10,
+
+                    _ => 111, // lets just use textmate grammars instead..
+                }
+            },
             _ => 99
-        };
-        if let Some(x) = marlowe_match {
-            match x.1 {
-                marlowe_lang::parsing::Rule::Case => 3,
-                _ => default_func(rule)
-            }
-        } else { default_func(rule) }
+        }
     }
+
 }
+
+
 fn update_asts(source:String,state:&mut State,url:Url)  {
        
     let marlowe_tokens = marlowe_lang::parsing::Rule::lsp_parse(
-        source.clone(), |_rule,_range|{0} // we don't use output from this fn atm
+        source.clone(), |_str,_rule,_range|{0} // we don't use output from this fn atm
     );
 
     let mar_vec = 
@@ -749,10 +1144,32 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
     while let Some(x) = my_instance.next() {
 
         let mut write_note = |xxx:&pest::iterators::Pair<Rule>,s:&str,v:DiagnosticSeverity| {
-            result.items.push((get_range(xxx.clone()),String::new(),s.to_string(),v))
+            let r = get_range(xxx.clone());
+            result.items.push((r.clone(),String::new(),format!("{}",s),v))
         };
+
         match x.as_rule() {
-            
+
+            Rule::Currency => {
+               
+                let mut token_token = x.clone().into_inner();
+                let token_token_policy = token_token.next().unwrap().as_str();
+                let token_token_name = token_token.next().unwrap().as_str();
+
+                if token_token_policy.is_empty() && token_token_name.is_empty() {
+                    write_note(&x,&format!("ADA (blank id and name means the main asset type of the blockchain should be used here)"),DiagnosticSeverity::HINT);
+                } else {
+                    write_note(&x,&format!("Token with Policy Id '{token_token_policy}' and Name '{token_token_name}'."),DiagnosticSeverity::HINT);
+                }
+            },
+            Rule::Address => {
+                let mut addr_token = x.clone().into_inner();
+                let addr_str = addr_token.next().unwrap().as_str();
+                match marlowe_lang::types::marlowe::Address::from_bech32(addr_str) {
+                    std::result::Result::Ok(_) => {},
+                    std::result::Result::Err(e) => write_note(&x,&format!("Invalid address! {e:?}"),DiagnosticSeverity::WARNING)
+                }
+            },
             Rule::Case => {
                 
                 // Cases consist of an action and a continuation contract.
@@ -777,6 +1194,7 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
 
                 // -- PERFORM ALL CONTEXT MUTATIONS --------------------
                 match action.as_rule() {
+                    
                     Rule::Deposit => {
                         // We clone this here because we still want to perform the normal validation
                         // let mut cloned_deposit = action.clone().into_inner();
@@ -904,7 +1322,7 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
                 let choice_id_name = choice_id.next().unwrap();
                 let choice_id_name_value = choice_id_name.as_str().to_string(); // Strings cannot be holes.
                 let party = choice_id.next().unwrap(); // party can be a hole.
-                let who_done_it = party.as_str().to_string();
+                let who_done_it = party.clone().as_str().to_string();
 
                 // Validate that a choice with that name, and the same party exists.
                 let the_choice = choice_id_name_value.clone() + &who_done_it;
@@ -915,8 +1333,6 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
                         DiagnosticSeverity::WARNING
                     );
                 }
-
-
 
 
             }
@@ -952,7 +1368,7 @@ fn recursively_validate_contract(pairs:pest::iterators::Pairs<'static,marlowe_la
 // We do multiple passes (sexpress+marlowe) for parsing because it was easier to do
 // than switch from pest.rs which does not support token streaming..
 trait LSParse<T> {
-    fn lsp_parse(sample:String, f: impl Fn(T,Range) -> u32) ->
+    fn lsp_parse(sample:String, f: impl Fn(String,T,Range) -> u32) ->
         std::result::Result<
             (Vec<(Range,T,lsp_types::SemanticToken)>,ContractValidationResult),
             (String,lsp_types::Range)>;
@@ -969,7 +1385,7 @@ macro_rules! Impl_LSPARSE_For {
         
         impl LSParse<$rule_type> for $rule_type {
             
-            fn lsp_parse(sample:String,f: impl Fn($rule_type,Range) -> u32) -> 
+            fn lsp_parse(sample:String,f: impl Fn(String,$rule_type,Range) -> u32) -> 
                 std::result::Result<
                     (Vec<(Range,$rule_type,lsp_types::SemanticToken)>,ContractValidationResult), (String,lsp_types::Range)
                 > {
@@ -1005,8 +1421,8 @@ macro_rules! Impl_LSPARSE_For {
                                     corrected_start = corrected_start - 1;
                                 }       
                                 let corrected_line = (start_line - last_line_start);
-                                let calculated_length = span.as_str().len();
-
+                                let span_str = span.as_str();
+                                
                                 let token = SemanticToken { 
                                     // `deltaLine`: token line number, relative to the previous token
                                     // `deltaStart`: token start character, relative to the previous token 
@@ -1016,9 +1432,9 @@ macro_rules! Impl_LSPARSE_For {
                                     // `tokenModifiers`: each set bit will be looked up in `SemanticTokensLegend.tokenModifiers`
                                     delta_line: corrected_line as u32,
                                     delta_start: corrected_start as u32 ,
-                                    length: calculated_length as u32,
-                                    token_type: f(x.as_rule(),range), 
-                                    token_modifiers_bitset: 0 
+                                    length: span_str.len() as u32,
+                                    token_type: f(span_str.to_owned(),x.as_rule(),range), 
+                                    token_modifiers_bitset: 0
                                 };
         
                                 (last_line_start,last_start) = (start_line,start_col);

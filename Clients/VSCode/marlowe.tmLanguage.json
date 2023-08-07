@@ -45,11 +45,11 @@
       "include": "#strings"
     }
   ],
-  "repository": {
-     "otherKeywords": {
+ "repository": {
+    "otherKeywords": {
       "patterns": [
         {
-          "name": "keyword.other.marlowe",
+          "name": "keyword.value.marlowe.marlowe",
           "match": "\\b(ConstantParam|ChoiceId|TimeParam|Token)\\b"
         }
       ]
@@ -57,7 +57,7 @@
     "actionKeywords": {
       "patterns": [
         {
-          "name": "keyword.action.marlowe",
+          "name": "entity.name.function.action.marlowe",
           "match": "\\b(Deposit|Choice|Notify)\\b"
         }
       ]
@@ -97,7 +97,7 @@
     "partyKeywords": {
       "patterns": [
         {
-          "name": "keyword.party.marlowe",
+          "name": "variable.party.marlowe",
           "match": "\\b(Role|Address)\\b"
         }
       ]
@@ -113,7 +113,7 @@
     "contractKeywords": {
       "patterns": [
         {
-          "name": "keyword.contract.marlowe",
+          "name": "keyword.control.contract.marlowe",
           "match": "\\b(Close|Pay|If|When|Let|Assert)\\b"
         }
       ]

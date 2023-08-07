@@ -1,0 +1,10 @@
+{
+    "iconDefinitions": {
+        "_file_marlowe": {
+            "iconPath": "./m.png"
+        }
+    },
+    "fileExtensions": {
+        "marlowe": "_file_marlowe"
+    }
+}
