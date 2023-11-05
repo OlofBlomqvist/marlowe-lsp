@@ -1,20 +1,22 @@
-mod common;
-
-
-use std::collections::{HashMap, VecDeque};
-
-use crate::common::*;
-
-use lsp_types::{request::Request, LogMessageParams};
+#[cfg(feature = "lib-deps")]
 use web_sys::{DedicatedWorkerGlobalScope, console};
+
+#[cfg(feature = "lib-deps")]
 use wasm_bindgen::{JsCast, prelude::wasm_bindgen, JsValue};
+
+#[cfg(feature = "lib-deps")]
 use console_error_panic_hook;
+
+#[cfg(feature = "lib-deps")]
 #[wasm_bindgen]
 pub fn set_panic_hook() {
     console_error_panic_hook::set_once();
 }
 
+#[cfg(feature = "lib-deps")]
 use js_sys::JSON;
+
+#[cfg(feature = "lib-deps")]
 #[wasm_bindgen]
 pub fn mainly() {
 
@@ -87,7 +89,7 @@ pub fn mainly() {
     worker.post_message(&"ready!".into()).unwrap();
 }
 
-
+#[cfg(feature = "lib-deps")]
 fn send_msg(value:&wasm_bindgen::JsValue) {
     let worker: DedicatedWorkerGlobalScope = js_sys::global().dyn_into().unwrap();        
     worker.post_message(value).unwrap();

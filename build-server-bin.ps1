@@ -1,8 +1,7 @@
 $originalPath = $pwd
 try {
     Set-Location .\Server
-    wasm-pack build --target web
-    wasm-pack pack
+    cargo build --bin marlowe_lsp
 } catch {
     write-error $_
 } finally {

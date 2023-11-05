@@ -1,159 +1,45 @@
 {
-  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Marlowe",
+  "scopeName": "source.marlowe",
   "patterns": [
     {
-      "include": "#comments"
+      "name": "keyword.control",
+      "match": "\\b(Close|Pay|If|When|Let|Assert|Deposit|Choice|Notify)\\b"
     },
     {
-      "include": "#actionKeywords"
-    },
-    {
-      "include": "#otherKeywords"
-    },
-    {
-      "include": "#valueKeywords"
-    },
-    {
-      "include": "#observationKeywords"
-    },
-    {
-      "include": "#boundKeywords"
-    },
-    {
-      "include": "#payeeKeywords"
-    },
-    {
-      "include": "#partyKeywords"
-    },
-    {
-      "include": "#caseKeywords"
-    },
-    {
-      "include": "#contractKeywords"
-    },
-    {
-      "include": "#numbers"
-    },
-    {
-      "include": "#operators"
-    },
-    {
-      "include": "#punctuation"
-    },
-    {
-      "include": "#strings"
-    }
-  ],
- "repository": {
-    "otherKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.value.marlowe.marlowe",
-          "match": "\\b(ConstantParam|ChoiceId|TimeParam|Token)\\b"
-        }
-      ]
-    },
-    "actionKeywords": {
-      "patterns": [
-        {
-          "name": "entity.name.function.action.marlowe",
-          "match": "\\b(Deposit|Choice|Notify)\\b"
-        }
-      ]
-    },
-    "valueKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.value.marlowe",
-          "match": "\\b(AvailableMoney|Constant|NegValue|AddValue|SubValue|MulValue|DivValue|ChoiceValue|TimeIntervalStart|TimeIntervalEnd|UseValue|Cond)\\b"
-        }
-      ]
-    },
-    "observationKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.observation.marlowe",
-          "match": "\\b(AndObs|OrObs|NotObs|ChoseSomething|ValueGE|ValueGT|ValueLT|ValueLE|ValueEQ|TrueObs|FalseObs)\\b"
-        }
-      ]
-    },
-    "boundKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.bound.marlowe",
-          "match": "\\bBound\\b"
-        }
-      ]
-    },
-    "payeeKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.payee.marlowe",
-          "match": "\\b(Account|Party)\\b"
-        }
-      ]
-    },
-    "partyKeywords": {
-      "patterns": [
-        {
-          "name": "variable.party.marlowe",
-          "match": "\\b(Role|Address)\\b"
-        }
-      ]
-    },
-    "caseKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.case.marlowe",
-          "match": "\\b(Case|MerkleizedCase)\\b"
-        }
-      ]
-    },
-    "contractKeywords": {
-      "patterns": [
-        {
-          "name": "keyword.control.contract.marlowe",
-          "match": "\\b(Close|Pay|If|When|Let|Assert)\\b"
-        }
-      ]
-    },
-    "numbers": {
-      "name": "constant.numeric.marlowe",
+      "name": "constant.numeric",
       "match": "\\b\\d+\\b"
     },
-    "operators": {
-      "name": "keyword.operator.marlowe",
-      "match": "[=><]+"
+    {
+      "name": "string.quoted",
+      "match": "\"[^\"]*\""
     },
-    "punctuation": {
-      "name": "punctuation.marlowe",
-      "match": "[{}\\[\\];(),.:]"
+    {
+      "name": "constant.language",
+      "match": "\\b(TrueObs|FalseObs|Address|Role|Account|Party|ChoiceId|ValueId|Bound|Timeout|Token)\\b"
     },
-    "strings": {
-      "name": "string.quoted.double.marlowe",
-      "begin": "\"",
-      "end": "\"",
+    {
+      "name": "keyword.operator",
+      "match": "\\b(AndObs|OrObs|NotObs|ChoseSomething|ValueGE|ValueGT|ValueLT|ValueLE|ValueEQ|AvailableMoney|Constant|NegValue|AddValue|SubValue|MulValue|DivValue|ChoiceValue|TimeIntervalStart|TimeIntervalEnd|UseValue|Cond)\\b"
+    }
+  ],
+  "repository": {
+    "comment": {
       "patterns": [
         {
-          "name": "constant.character.escape.marlowe",
-          "match": "\\\\."
-        }
-      ]
-    },
-    "comments": {
-      "patterns": [
-        {
-          "name": "comment.line.marlowe",
-          "match": "//.*"
-        },
-        {
-          "name": "comment.block.marlowe",
-          "begin": "/\\*",
-          "end": "\\*/"
+          "name": "comment.line",
+          "match": "--.*"
         }
       ]
     }
   },
-  "scopeName": "source.marlowe"
+  "injections": {
+    "L:comment": {
+      "patterns": [
+        {
+          "include": "#comment"
+        }
+      ]
+    }
+  }
 }

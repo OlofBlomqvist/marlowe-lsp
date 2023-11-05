@@ -3,7 +3,8 @@ use std::ops::Range;
 use codespan_reporting::files::{Error, Files};
 use lsp_types::{Position as LspPosition, Range as LspRange};
 
-fn character_to_line_offset(line: &str, character: u32) -> Result<usize, Error> {
+#[allow(unused)]
+pub fn character_to_line_offset(line: &str, character: u32) -> Result<usize, Error> {
     let line_len = line.len();
     let mut character_offset = 0;
 
@@ -29,6 +30,7 @@ fn character_to_line_offset(line: &str, character: u32) -> Result<usize, Error> 
     }
 }
 
+#[allow(unused)]
 pub fn position_to_byte_index<'a, F>(
     files: &'a F,
     file_id: F::FileId,
@@ -48,6 +50,7 @@ where
     Ok(line_span.start + byte_offset)
 }
 
+#[allow(unused)]
 pub fn range_to_byte_span<'a, F>(
     files: &'a F,
     file_id: F::FileId,

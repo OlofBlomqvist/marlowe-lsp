@@ -2,7 +2,7 @@ mod codespan_lsp_local;
 use codespan::FileId;
 use codespan_reporting::files::Error;
 use marlowe_lang::{parsing::Rule};
-use regex::{Regex};
+use regex::Regex;
 use serde::de::value;
 use std::{collections::{HashMap, VecDeque}, sync::Mutex, hash::Hash};
 use serde_json::{Value, json};
@@ -1376,7 +1376,7 @@ trait LSParse<T> {
     fn get_token_info_at_position(p:Vec<(Range,T,lsp_types::SemanticToken)>,position:lsp_types::Position, f:fn(T)->String) -> Option<String>;
 }
 
-use pest::{Parser};
+use pest::Parser;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! Impl_LSPARSE_For {

@@ -4,6 +4,8 @@ An experimental LSP for Cardano Marlowe using [marlowe-rs](https://github.com/Ol
 
 For the VSCode extension, go [here](https://marketplace.visualstudio.com/items?itemName=OlofBlomqvist.marlowelsp).
 
+The server can be built also for WASM and WASI.
+
 ### Requirements for building
 
 * Cargo/Rust nightly toolchain
@@ -12,7 +14,4 @@ For the VSCode extension, go [here](https://marketplace.visualstudio.com/items?i
    ```
 
 * [NPM](https://www.npmjs.com/)
-
-
-
 

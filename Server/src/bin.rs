@@ -1,5 +1,6 @@
 #![feature(start)]
 #![feature(ascii_char)]
+#[allow(unused)]
 
 mod common;
 use common::*;
@@ -12,6 +13,7 @@ use std::result::Result::Ok;
 use std::result::Result::Err;
 use std::io::Read;
 use std::io::Write;
+
 
 fn main() {
 
