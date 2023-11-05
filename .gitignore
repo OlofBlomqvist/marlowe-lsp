@@ -1,3 +1,4 @@
 server/target
-Clients/VSCode/node_modules
+**/node_modules
 Clients/VSCode/build
+Clients/VSCode_WASI/out

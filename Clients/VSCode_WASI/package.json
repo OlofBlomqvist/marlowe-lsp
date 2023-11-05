@@ -1,0 +1,30 @@
+{
+	"name": "marlowe-wasi",
+	"description": "LSP Testbed",
+	"version": "0.1.0",
+	"publisher": "olof",
+	"engines": {
+		"vscode": "^1.78.0"
+	},
+	"main": "./client/out/extension.js",
+	"activationEvents": [
+		"onLanguage:marlowe"
+	],
+	"enabledApiProposals": [
+	],
+	"contributes": {
+		"languages": [
+			{
+				"id": "marlowe",
+				"extensions": [
+					".marlowe"
+				],
+				"aliases": [
+					"Marlowe"
+				]
+			}
+		]
+	},
+	"scripts": {
+	}
+}

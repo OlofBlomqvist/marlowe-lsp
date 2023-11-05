@@ -1,0 +1,29 @@
+{
+	"name": "client",
+	"displayName": "LSP WASM Test client",
+	"version": "0.1.0",
+	"private": true,
+	"author": "asdasdasdasdasd",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.78.0"
+	},
+	"activationEvents": [
+		"onLanguage:bat"
+	],
+	"devDependencies": {
+		"@types/vscode": "1.84.0"
+	},
+	"dependencies": {
+		"@types/node": "^20.8.10",
+		"@vscode/wasm-wasi": "0.13.0-pre.1",
+		"typescript": "^5.2.2",
+		"vscode-languageclient": "9.0.1",
+		"vscode-uri": "3.0.3"
+	},
+	"scripts": {
+		"build": "npm run compile",
+		"compile": "node node_modules/typescript/lib/tsc.js -b tsconfig.json",
+		"watch": "node node_modules/typescript/lib/tsc.js -b tsconfig.json -w"
+	}
+}
