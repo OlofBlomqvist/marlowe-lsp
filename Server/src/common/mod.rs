@@ -42,9 +42,9 @@ pub struct MarloweLSPServer{
 
 impl  MarloweLSPServer {
     pub fn initialize(&mut self, _: InitializeParams) -> Result<InitializeResult> {
-        self.state.outgoing_log_messages.push_back((MessageType::INFO,"initializing".into()));
+        self.state.outgoing_log_messages.push_back((MessageType::INFO,"Initializing Marlowe LSP Server".into()));
         Ok(InitializeResult {
-            server_info: Some(ServerInfo { name: "marlowe lsp wasm test".into(), version: Some("0.0.1-alpha".into()) }),
+            server_info: Some(ServerInfo { name: "marlowe lsp".into(), version: Some("0.0.2-alpha".into()) }),
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::INCREMENTAL,
@@ -398,7 +398,7 @@ impl  MarloweLSPServer {
         //         toks.to_vec(),completion_params.text_document_position.position
         //     );
 
-        self.state.outgoing_log_messages.push_back((lsp_types::MessageType::WARNING,format!("oh my we see this is the closest item : {:?}..",closest)));
+        //self.state.outgoing_log_messages.push_back((lsp_types::MessageType::WARNING,format!("This is the closest item : {:?}..",closest)));
 
 
         
@@ -449,7 +449,7 @@ impl  MarloweLSPServer {
 
         let action_snippets = Self::suggest_this(closest,"?action",vec![
             ("Choice",r#"(Choice (ChoiceId "${1:choiceNumber}" ${2:?party}) [ ${3:?bounds} ])"#),
-            ("Deposit",r#"(Deposit ${1:?party} ${2:?from_party} ${3:?token} ${4:?value})"#),
+            ("Deposit",r#"(Deposit ${1:?party} ${2:?party} ${3:?token} ${4:?value})"#),
             ("Notify",r#"(Notify ${1:?observation})"#)
         ]);
 
@@ -470,7 +470,7 @@ impl  MarloweLSPServer {
                 }
             );
 
-        if source.trim().len() < 8{
+        if source.trim().chars().count() < 8{
             return Ok(Some(lsp_types::CompletionResponse::List(
                 CompletionList { 
                     is_incomplete: false, 
@@ -493,7 +493,7 @@ impl  MarloweLSPServer {
             ("Close",r#"Close"#),
             ("Assert",r#"(Assert ${1:?observation} ${2:?contract})"#),
             ("Pay",r#"(Pay ${1:?party} ${2:?payee} ${3:?token} ${4:?value} ${5:?contract})"#),
-            ("Let",r#"(Let "${1:valueId}" ${2:?value} ${3:?contract})"#),
+            ("Let",r#"(Let "${1:?valueId}" ${2:?value} ${3:?contract})"#),
             ("When",r#"(When [] ${1:?timeout} ${2:?contract})"#),
             ("If",r#"(If ${1:?observation} ${2:?contract} ${3:?contract})"#)
         ]);
@@ -772,7 +772,6 @@ impl  MarloweLSPServer {
                             })
                         },
                         DidChangeTextDocument::METHOD => {
-                            //self.state.outgoing_log_messages.push_back((lsp_types::MessageType::INFO,format!("yo, someone changed a document!!!")));
                             Self::handle_request_silent::<DidChangeTextDocumentParams,Option<()>,_>(&mut map, |params| {
                                 self.did_change(params)
                             })
@@ -1474,11 +1473,11 @@ macro_rules! Impl_LSPARSE_For {
             
                 fn get_token_at_position(tokens:Vec<(Range,$rule_type,lsp_types::SemanticToken)>,position:lsp_types::Position) -> Option<(Range,$rule_type,SemanticToken)> {
                     let line = position.line + 1;
-                    let char = position.character + 1;
+                    let character = position.character + 1;
                     let mut currently_closest : Option<(Range,$rule_type,SemanticToken)> = None;
                     let mut filtered = 
                         tokens.iter().filter(|(range,_rule,_token)|{    
-                            if range.start.line > line || (range.start.line == line && range.start.character > char) {
+                            if range.start.line > line || (range.start.line == line && range.start.character > character) {
                                 return false
                             }
                             true
